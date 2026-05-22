@@ -1,4 +1,4 @@
-# Development Plan: PX-Intel Unsupervised Audit & Predictive System
+# Development Plan: CX-Intel Unsupervised Audit & Predictive System
 
 ## 1. Project Vision
 

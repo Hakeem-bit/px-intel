@@ -1,8 +1,8 @@
-# PX-Intel: Unsupervised-First Approach (M1-M4)
+# CX-Intel: Unsupervised-First Approach (M1-M5)
 
 ## Overview
 
-PX-Intel has transitioned from a **supervised/zero-shot** model approach (RoBERTa + DeBERTa) to an **unsupervised-first discovery system** that automatically discovers service gaps without pre-defined categories.
+CX-Intel has transitioned from a **supervised/zero-shot** model approach (RoBERTa + DeBERTa) to an **unsupervised-first discovery system** that automatically discovers service gaps without pre-defined categories.
 
 The documentation and dashboard now emphasize plain-language, service-oriented interpretation. The same workflow can be applied to hospital, customer, client, or other feedback streams.
 

@@ -1,5 +1,5 @@
 """
-Robust CSV Data Loader for Hospital Feedback Analysis
+Robust CSV Data Loader for Customer Experience Feedback Analysis
 Handles mixed line terminators, UTF-8 encoding, and large text entries
 """
 
@@ -26,7 +26,7 @@ class LoaderStats:
 
 class DataLoader:
     """
-    Robust data loader for hospital feedback CSV files.
+    Robust data loader for customer experience feedback CSV files.
     
     Handles:
     - Mixed line terminators (CRLF, LF, CR)

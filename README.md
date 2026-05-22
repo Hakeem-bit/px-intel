@@ -1,15 +1,16 @@
-# PX-Intel: Service Feedback Analysis System
+# CX-Intel: Customer Experience Intelligence System
 
 A comprehensive sentiment and causal analysis system for service feedback using advanced NLP models.
 
 ## Overview
 
-PX-Intel processes service feedback data through four phases:
+CX-Intel processes service feedback data through five phases:
 
 - **Phase 1**: Robust data loading with error handling (10,301+ entries)
 - **Phase 2**: Streamlit prototype with sentiment analysis (RoBERTa)
 - **Phase 3**: Advanced NLI-based causal analysis (DeBERTa) - Archived
 - **Phase 4**: Unsupervised clustering pipeline (LDA + K-Means + t-SNE) - **Active**
+- **Phase 5**: Action intelligence dashboard with priority scores, recommendations, and soft cascades - **Active**
 
 The current emphasis is on plain-language insights that help explain how feedback relates to service experience, regardless of whether the domain is healthcare, customer support, or another client-facing setting.
 
@@ -68,10 +69,18 @@ Current limitation: cascade suggestions are still broad in some clusters. The ne
 
 #### M4 - Dashboard
 
+- **Action Dashboard Tab**: Manager-ready priority table, recommendations, soft cascades, and example feedback
 - **Landscape Tab**: Interactive t-SNE scatter with zone coloring
 - **Cluster Audit Tab**: Sentiment breakdown and top keywords per cluster
 - **Causal Analysis Tab**: Cascade predictions, causal chains, and service-oriented follow-up guidance
 - **Data Export Tab**: CSV and pickle download
+
+#### M5 - Action Intelligence Agent
+
+- Rule-based priority scoring from negative sentiment, cluster size, and keyword density
+- Practical recommendations for service managers
+- Soft cascade mapping for common operational links such as wait → staffing → scheduling
+- One-line insight summaries for each cluster
 
 ### Phase 2-3: Supervised Analysis (Archived)
 
@@ -97,7 +106,7 @@ Still available in `app.py`:
 ├── test_cluster_audit.py               # Phase 4 M2 tests
 ├── test_integration.py                 # End-to-end M1-M4 test
 ├── requirements.txt                    # Python dependencies
-├── text_data.csv                       # Hospital feedback data (10,334 rows)
+├── text_data.csv                       # Customer feedback data (10,334 rows)
 ├── README.md                           # This file
 ├── PROJECT_STATUS.md                   # Complete project overview
 ├── UNSUPERVISED_APPROACH.md            # Phase 4 technical documentation
@@ -160,4 +169,4 @@ See **PROJECT_STATUS.md** or **UNSUPERVISED_APPROACH.md** for detailed troublesh
 
 ## Author
 
-PX-Intel Development Team
+CX-Intel Development Team

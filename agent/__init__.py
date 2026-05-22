@@ -1,8 +1,16 @@
 """
-PX-Intel Agent System
-Intelligent orchestration layer for hospital feedback analysis
+CX-Intel Agent System
+Intelligent orchestration layer for customer experience analysis
 """
 
+from .action_intelligence import (
+    ActionInsight,
+    CXActionIntelligenceAgent,
+    calculate_priority_score,
+    generate_recommendation,
+    generate_soft_cascades,
+    priority_label_for_score,
+)
 from .px_agent import (
     PXIntelAgent,
     AgentInsight,
@@ -22,6 +30,12 @@ __all__ = [
     "PriorityIssue",
     "AnalysisType",
     "Severity",
+    "ActionInsight",
+    "CXActionIntelligenceAgent",
+    "calculate_priority_score",
+    "generate_recommendation",
+    "generate_soft_cascades",
+    "priority_label_for_score",
     "ExperimentPipeline",
     "ExperimentResult",
     "AgentVisualizer",

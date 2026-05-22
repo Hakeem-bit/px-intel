@@ -1,5 +1,5 @@
 """
-PX-Intel: Hospital Feedback Analysis System
+CX-Intel: Customer Experience Intelligence System
 Sentiment Analysis (RoBERTa) + Causal Analysis (DeBERTa) with Phase 3 NLI enhancements
 """
 
@@ -12,6 +12,7 @@ from transformers import pipeline
 from data_loader import DataLoader
 import pickle
 from pathlib import Path
+from agent.integration import render_agent_tab
 
 
 # ============================================================================
@@ -171,9 +172,9 @@ def analyze_sentiment_batch(texts: list, model) -> list:
 
 def main():
     """Main Streamlit application"""
-    st.set_page_config(page_title="PX-Intel Sentiment Analysis", layout="wide")
+    st.set_page_config(page_title="CX-Intel Sentiment Analysis", layout="wide")
     
-    st.title("🏥 PX-Intel: Hospital Feedback Analysis System")
+    st.title("CX-Intel: Customer Experience Intelligence System")
     st.markdown("**Sentiment Analysis + Causal Analysis using RoBERTa & DeBERTa**")
     
     # Initialize session state
@@ -337,11 +338,22 @@ def main():
     
     else:
         st.info("👆 Click 'Run Analysis' in the sidebar to start analysis")
+
+    # ====================================================================
+    # Agent Analysis
+    # ====================================================================
+    st.markdown("---")
+    agent_subset = (
+        st.session_state.sentiment_results
+        if st.session_state.sentiment_results is not None
+        else data.head(max_entries).copy()
+    )
+    render_agent_tab(agent_subset, sentiment_model, deberta_model)
     
     # Footer
     st.markdown("---")
     st.markdown(
-        "**PX-Intel v3.0** | RoBERTa + DeBERTa | "
+        "**CX-Intel v3.0** | RoBERTa + DeBERTa | "
         "Phase 3: NLI Causal Analysis | "
         "[GitHub](https://github.com/scifiengineering/px-intel)"
     )

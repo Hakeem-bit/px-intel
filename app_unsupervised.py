@@ -794,6 +794,51 @@ def apply_app_theme():
             line-height: 1.48;
         }
 
+        .cx-slogan-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 0.1rem 0 1rem;
+            padding: 0.95rem 1.05rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background:
+                radial-gradient(circle at 88% 18%, rgba(6, 182, 212, 0.14), transparent 28%),
+                linear-gradient(135deg, rgba(23, 32, 51, 0.96), rgba(38, 58, 122, 0.92));
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-slogan-strip h1 {
+            margin: 0.15rem 0 0;
+            color: #ffffff;
+            font-size: 1.35rem;
+            line-height: 1.2;
+            font-weight: 820;
+            letter-spacing: 0;
+        }
+
+        .cx-slogan-strip p {
+            margin: 0.25rem 0 0;
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+
+        .cx-slogan-strip .cx-eyebrow {
+            color: rgba(255, 255, 255, 0.68);
+        }
+
+        .cx-slogan-badge {
+            flex: 0 0 auto;
+            padding: 0.42rem 0.72rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.13);
+            color: #ffffff;
+            font-size: 0.74rem;
+            font-weight: 850;
+        }
+
         .cx-table-panel {
             margin: 1.2rem 0 0.55rem;
             padding: 0.95rem 1rem;
@@ -981,6 +1026,11 @@ def apply_app_theme():
             .cx-priority-row {
                 grid-template-columns: 1fr;
             }
+
+            .cx-slogan-strip {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
         </style>
         """,
@@ -1068,6 +1118,22 @@ def render_hero():
                     </div>
                 </div>
             </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_slogan_strip():
+    st.markdown(
+        """
+        <section class="cx-slogan-strip">
+            <div>
+                <p class="cx-eyebrow">PX-Intel AI business intelligence</p>
+                <h1>Turn feedback clusters into faster service decisions.</h1>
+                <p>Service feedback discovery, customer intelligence, operational impact, and AI-assisted action support powered by the existing PX-Intel pipeline.</p>
+            </div>
+            <span class="cx-slogan-badge">Decision support</span>
         </section>
         """,
         unsafe_allow_html=True,
@@ -3088,6 +3154,199 @@ def render_operational_action_plan(rows):
             )
 
 
+def build_intervention_projection(selected_cluster_id, action_insights, causal_engine, improvement_pct):
+    insight_by_cluster = {insight.cluster_id: insight for insight in action_insights}
+    selected_insight = insight_by_cluster.get(selected_cluster_id)
+    if selected_insight is None:
+        return pd.DataFrame(), None
+
+    rows = []
+    direct_negative = selected_insight.metadata.get("negative_rate", 0)
+    direct_reduction = improvement_pct / 100
+    rows.append(
+        {
+            "Cluster": f"C{selected_insight.cluster_id}",
+            "Theme": selected_insight.issue_theme.title(),
+            "Impact Path": "Direct issue",
+            "Current Negative Rate": direct_negative,
+            "Projected Negative Rate": max(0, direct_negative * (1 - direct_reduction)),
+            "Projected Change": direct_negative * direct_reduction,
+            "Likelihood": 1.0,
+            "Why It Changes": "This is the selected problem being improved directly.",
+            "Recommended Action": selected_insight.recommended_action,
+        }
+    )
+
+    for cascade in getattr(causal_engine, "cascade_predictions", {}).get(
+        selected_cluster_id, []
+    )[:5]:
+        target_cluster = int(cascade.get("target_cluster", -1))
+        target_insight = insight_by_cluster.get(target_cluster)
+        if target_insight is None:
+            continue
+        likelihood = float(cascade.get("cascade_likelihood", 0))
+        current_negative = target_insight.metadata.get("negative_rate", 0)
+        cascade_reduction = direct_reduction * likelihood * 0.55
+        projected_negative = max(0, current_negative * (1 - cascade_reduction))
+        rows.append(
+            {
+                "Cluster": f"C{target_cluster}",
+                "Theme": target_insight.issue_theme.title(),
+                "Impact Path": "Related cascade",
+                "Current Negative Rate": current_negative,
+                "Projected Negative Rate": projected_negative,
+                "Projected Change": current_negative - projected_negative,
+                "Likelihood": likelihood,
+                "Why It Changes": cascade.get(
+                    "cascade_interpretation",
+                    f"Cluster {target_cluster} shares service factors with Cluster {selected_cluster_id}.",
+                ),
+                "Recommended Action": target_insight.recommended_action,
+            }
+        )
+
+    projection_df = pd.DataFrame(rows)
+    return projection_df, selected_insight
+
+
+def render_change_impact_simulator(action_insights, causal_engine):
+    st.markdown(
+        '<h4 class="cx-section-heading">Change Impact Simulator</h4>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Model a practical scenario: if one customer problem improves, which connected clusters may benefit next?"
+    )
+
+    if not action_insights:
+        st.info("No action insights are available for scenario modeling.")
+        return
+
+    scenario_col, strength_col = st.columns([1.45, 1])
+    with scenario_col:
+        selected_cluster_id = st.selectbox(
+            "Problem to improve",
+            [insight.cluster_id for insight in action_insights],
+            format_func=lambda cluster_id: (
+                f"Cluster {cluster_id}: "
+                f"{next(item.issue_theme.title() for item in action_insights if item.cluster_id == cluster_id)}"
+            ),
+            key="operational_change_simulator_cluster",
+        )
+    with strength_col:
+        improvement_pct = st.slider(
+            "Expected direct improvement",
+            min_value=10,
+            max_value=80,
+            value=35,
+            step=5,
+            format="%d%%",
+            key="operational_change_simulator_improvement",
+        )
+
+    projection_df, selected_insight = build_intervention_projection(
+        selected_cluster_id,
+        action_insights,
+        causal_engine,
+        improvement_pct,
+    )
+    if projection_df.empty or selected_insight is None:
+        st.info("No scenario projection is available for this problem.")
+        return
+
+    connected_count = max(len(projection_df) - 1, 0)
+    projected_total_change = projection_df["Projected Change"].sum()
+    highest_related = projection_df.iloc[1] if len(projection_df) > 1 else None
+
+    metric_cols = st.columns(3)
+    with metric_cols[0]:
+        render_kpi_card(
+            "Selected Problem",
+            f"C{selected_cluster_id}",
+            selected_insight.issue_theme.title(),
+            "#3b82f6",
+        )
+    with metric_cols[1]:
+        render_kpi_card(
+            "Connected Clusters",
+            connected_count,
+            "Likely downstream effects",
+            "#06b6d4",
+        )
+    with metric_cols[2]:
+        render_kpi_card(
+            "Total Negative Shift",
+            f"{projected_total_change:.0%}",
+            "Across modeled clusters",
+            "#10b981",
+        )
+
+    st.markdown(
+        '<div class="cx-decision-card">'
+        '<div class="cx-card-topline">'
+        '<span class="cx-icon-block">IF</span>'
+        f'<span class="cx-chip {priority_class(selected_insight.priority_label)}">{escape(selected_insight.priority_label)}</span>'
+        "</div>"
+        f"<h4>If Cluster {selected_cluster_id}: {escape(selected_insight.issue_theme.title())} improves by {improvement_pct}%</h4>"
+        f"<p>{escape(selected_insight.key_insight)}</p>"
+        '<div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem; margin-top:0.75rem;">'
+        f'<strong style="color:var(--cx-ink);">Manager move:</strong> {escape(selected_insight.recommended_action)}'
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    chart_df = projection_df.copy()
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=chart_df["Cluster"],
+            y=chart_df["Current Negative Rate"],
+            name="Current",
+            marker_color="#ef4444",
+            hovertemplate="<b>%{x}</b><br>Current negative: %{y:.0%}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            x=chart_df["Cluster"],
+            y=chart_df["Projected Negative Rate"],
+            name="Projected after change",
+            marker_color="#10b981",
+            hovertemplate="<b>%{x}</b><br>Projected negative: %{y:.0%}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title="Before vs After Scenario",
+        yaxis_title="Negative feedback rate",
+        xaxis_title="Affected cluster",
+        yaxis_tickformat=".0%",
+        barmode="group",
+    )
+    apply_operational_chart_theme(fig, height=360)
+    st.plotly_chart(fig, width="stretch")
+
+    if highest_related is not None:
+        st.markdown(
+            '<div class="cx-impact-path">'
+            f'<strong style="color:var(--cx-ink);">Most likely related impact: {escape(highest_related["Cluster"])} - {escape(highest_related["Theme"])}</strong><br>'
+            f'{escape(highest_related["Why It Changes"])}'
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    display_df = projection_df.copy()
+    for column in ["Current Negative Rate", "Projected Negative Rate", "Projected Change", "Likelihood"]:
+        display_df[column] = display_df[column].map(lambda value: f"{value:.0%}")
+    render_table_section(
+        "Scenario Impact Detail",
+        "A readable estimate of direct and related improvements from the selected change.",
+        display_df,
+        "No scenario details are available.",
+        accent_label="What-if table",
+    )
+
+
 def render_operational_impact(
     causal_engine,
     action_insights,
@@ -3202,6 +3461,7 @@ def render_operational_impact(
 
     render_operational_priority_queue(visible_rows)
     render_operational_impact_charts(visible_rows)
+    render_change_impact_simulator(action_insights, causal_engine)
     render_ripple_summary(visible_rows)
     render_operational_action_plan(visible_rows)
 
@@ -3820,6 +4080,226 @@ def render_cluster_analysis(
     )
 
 
+def build_written_report(
+    report_type,
+    audience,
+    clustering_engine,
+    texts,
+    audit_engine,
+    causal_engine,
+    action_insights,
+):
+    generated_at = pd.Timestamp.now().strftime("%B %d, %Y")
+    high_priority = [
+        insight for insight in action_insights if insight.priority_label.startswith("HIGH")
+    ]
+    medium_priority = [
+        insight for insight in action_insights if insight.priority_label.startswith("MEDIUM")
+    ]
+    impact_rows = build_operational_impact_rows(action_insights, causal_engine)
+    systemic_rows = [row for row in impact_rows if row["impact_type"] == "Systemic Risk"]
+    opportunity_rows = [
+        insight
+        for insight in action_insights
+        if customer_lens_for_insight(insight) == "Opportunity"
+    ]
+    risk_rows = [
+        insight
+        for insight in action_insights
+        if customer_lens_for_insight(insight) == "At Risk"
+    ]
+    top_insight = action_insights[0] if action_insights else None
+
+    lines = [
+        f"# PX-Intel {report_type}",
+        "",
+        f"Generated: {generated_at}",
+        f"Audience: {audience}",
+        "",
+        "## Executive Readout",
+        "",
+    ]
+
+    if top_insight:
+        lines.extend(
+            [
+                (
+                    f"PX-Intel reviewed {len(texts):,} feedback entries and identified "
+                    f"{clustering_engine.optimal_n_clusters} experience clusters. "
+                    f"The strongest current signal is Cluster {top_insight.cluster_id}: "
+                    f"{top_insight.issue_theme.title()}, marked {top_insight.priority_label}."
+                ),
+                "",
+                f"Recommended first move: {top_insight.recommended_action}",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "PX-Intel does not have enough action insight data to generate a full decision report.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Current Signal Summary",
+            "",
+            f"- Feedback entries reviewed: {len(texts):,}",
+            f"- Experience clusters: {clustering_engine.optimal_n_clusters}",
+            f"- High-priority clusters: {len(high_priority)}",
+            f"- Medium-priority clusters: {len(medium_priority)}",
+            f"- At-risk customer signals: {len(risk_rows)}",
+            f"- Opportunity signals: {len(opportunity_rows)}",
+            f"- Systemic operational risks: {len(systemic_rows)}",
+            "",
+        ]
+    )
+
+    lines.extend(["## Priority Issues", ""])
+    for index, insight in enumerate(action_insights[:5], start=1):
+        lines.extend(
+            [
+                f"{index}. Cluster {insight.cluster_id}: {insight.issue_theme.title()} ({insight.priority_label})",
+                f"   - Insight: {insight.key_insight}",
+                f"   - Root cause: {insight.root_cause}",
+                f"   - Action: {insight.recommended_action}",
+            ]
+        )
+    if not action_insights:
+        lines.append("No priority issues are available.")
+    lines.append("")
+
+    if report_type == "Operational Action Report":
+        lines.extend(["## Operational Action Plan", ""])
+        for row in impact_rows[:5]:
+            cascade_text = (
+                ", ".join([f"C{target}" for target in row["cascade_targets"]])
+                if row["cascade_targets"]
+                else "No strong related cascade"
+            )
+            lines.extend(
+                [
+                    f"- Cluster {row['cluster_id']}: {row['theme']}",
+                    f"  - Impact type: {row['impact_type']}",
+                    f"  - Action window: {row['action_window']}",
+                    f"  - Related clusters: {cascade_text}",
+                    f"  - Recommended action: {row['recommended_action']}",
+                ]
+            )
+        lines.append("")
+    elif report_type == "Customer Intelligence Report":
+        lines.extend(["## Customer Intelligence", ""])
+        for insight in risk_rows[:4]:
+            lines.extend(
+                [
+                    f"- Risk signal C{insight.cluster_id}: {insight.issue_theme.title()}",
+                    f"  - Negative rate: {insight.metadata.get('negative_rate', 0):.0%}",
+                    f"  - Evidence: {shorten_text(insight.example_feedback, 180)}",
+                ]
+            )
+        for insight in opportunity_rows[:3]:
+            lines.extend(
+                [
+                    f"- Opportunity signal C{insight.cluster_id}: {insight.issue_theme.title()}",
+                    f"  - Strength to protect: {insight.key_insight}",
+                ]
+            )
+        lines.append("")
+    else:
+        lines.extend(["## Leadership Recommendations", ""])
+        for insight in action_insights[:3]:
+            lines.append(
+                f"- Prioritize Cluster {insight.cluster_id} by taking this action: {insight.recommended_action}"
+            )
+        lines.append("")
+
+    top_cascade = None
+    for row in impact_rows:
+        if row["cascade_targets"]:
+            top_cascade = row
+            break
+    lines.extend(["## Cause And Effect Note", ""])
+    if top_cascade:
+        related = ", ".join([f"Cluster {target}" for target in top_cascade["cascade_targets"][:3]])
+        lines.append(
+            f"Changing Cluster {top_cascade['cluster_id']} ({top_cascade['theme']}) may also influence {related}. "
+            "Use the Operational Impact simulator to test different improvement levels before selecting a response plan."
+        )
+    else:
+        lines.append(
+            "No strong cascade path is currently visible, so recommendations should focus on direct cluster-level improvements."
+        )
+    lines.append("")
+
+    lines.extend(
+        [
+            "## Next Steps",
+            "",
+            "1. Assign an owner to the highest-priority cluster.",
+            "2. Use the Change Impact Simulator to test how fixing one issue may affect related clusters.",
+            "3. Export the action, audit, and impact CSVs for deeper operational follow-up.",
+            "4. Review the report after new feedback data is loaded.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_written_report_generator(
+    clustering_engine,
+    texts,
+    audit_engine,
+    causal_engine,
+    action_insights,
+):
+    st.markdown(
+        '<h4 class="cx-section-heading">Written Report Builder</h4>',
+        unsafe_allow_html=True,
+    )
+    report_col, audience_col = st.columns([1, 1])
+    with report_col:
+        report_type = st.selectbox(
+            "Report type",
+            [
+                "Executive Summary Report",
+                "Operational Action Report",
+                "Customer Intelligence Report",
+            ],
+            key="written_report_type",
+        )
+    with audience_col:
+        audience = st.selectbox(
+            "Audience",
+            ["Leadership", "Operations", "Customer Experience", "Analyst Review"],
+            key="written_report_audience",
+        )
+
+    report_text = build_written_report(
+        report_type,
+        audience,
+        clustering_engine,
+        texts,
+        audit_engine,
+        causal_engine,
+        action_insights,
+    )
+    st.text_area(
+        "Report draft",
+        value=report_text,
+        height=420,
+        key="written_report_output",
+    )
+    st.download_button(
+        "Download written report",
+        data=report_text,
+        file_name="px_intel_written_report.md",
+        mime="text/markdown",
+        width="stretch",
+    )
+
+
 def render_reports_export(
     clustering_engine,
     texts,
@@ -3870,6 +4350,14 @@ def render_reports_export(
             mime="application/octet-stream",
             width="stretch",
         )
+
+    render_written_report_generator(
+        clustering_engine,
+        texts,
+        audit_engine,
+        causal_engine,
+        action_insights,
+    )
 
     preview_col, summary_col = st.columns([1.45, 1])
     with preview_col:
@@ -3960,6 +4448,7 @@ def run_causal_reasoning(
 def main():
     """Main dashboard flow."""
     active_section = render_sidebar()
+    render_slogan_strip()
 
     # Load data and run clustering
     with st.spinner("Loading data and discovering clusters..."):

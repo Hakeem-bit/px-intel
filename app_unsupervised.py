@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+from html import escape
 from data_loader import DataLoader
 from unsupervised_clustering import UnsupervisedClusteringEngine
 from cluster_audit import ClusterAuditEngine
@@ -28,51 +29,217 @@ st.set_page_config(
 
 
 def apply_app_theme():
-    """Apply CX-Intel visual styling."""
+    """Apply Soft UI-inspired CX-Intel visual styling."""
     st.markdown(
         """
         <style>
         :root {
-            --cx-blue-900: #0b1f3a;
-            --cx-blue-700: #174ea6;
-            --cx-blue-500: #2f7de1;
-            --cx-blue-100: #e8f1ff;
-            --cx-yellow-500: #f2c94c;
-            --cx-yellow-100: #fff7d6;
-            --cx-slate-700: #334155;
-            --cx-slate-500: #64748b;
-            --cx-border: rgba(23, 78, 166, 0.16);
-            --cx-glass: rgba(255, 255, 255, 0.78);
+            --cx-ink: #172033;
+            --cx-muted: #667085;
+            --cx-subtle: #94a3b8;
+            --cx-panel: rgba(255, 255, 255, 0.88);
+            --cx-panel-solid: #ffffff;
+            --cx-panel-soft: rgba(248, 250, 252, 0.82);
+            --cx-border: rgba(94, 114, 228, 0.14);
+            --cx-blue: #3b82f6;
+            --cx-cyan: #06b6d4;
+            --cx-green: #10b981;
+            --cx-amber: #f59e0b;
+            --cx-red: #ef4444;
+            --cx-violet: #8b5cf6;
+            --cx-shadow: 0 18px 45px rgba(20, 35, 70, 0.08);
+            --cx-radius: 1rem;
         }
 
         .stApp {
             background:
-                radial-gradient(circle at top left, rgba(47, 125, 225, 0.18), transparent 34rem),
+                radial-gradient(circle at 8% 8%, rgba(59, 130, 246, 0.16), transparent 26rem),
+                radial-gradient(circle at 92% 0%, rgba(139, 92, 246, 0.12), transparent 24rem),
                 linear-gradient(180deg, #f6f9ff 0%, #ffffff 44%, #f8fbff 100%);
-            color: var(--cx-blue-900);
+            color: var(--cx-ink);
         }
 
         .block-container {
-            padding-top: 1.4rem;
+            padding-top: 1.2rem;
             padding-bottom: 3rem;
-            max-width: 1420px;
+            max-width: 1480px;
+        }
+
+        [data-testid="stSidebar"] {
+            background: var(--cx-panel-solid);
+            border-right: 1px solid var(--cx-border);
+            box-shadow: 12px 0 30px rgba(20, 35, 70, 0.04);
+        }
+
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] label {
+            color: var(--cx-muted);
+        }
+
+        .cx-brand-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.35rem 0 1rem;
+        }
+
+        .cx-brand-mark {
+            width: 38px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
+            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
+            font-weight: 800;
+        }
+
+        .cx-brand-title {
+            color: var(--cx-ink);
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .cx-brand-subtitle {
+            color: var(--cx-muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .cx-sidebar-card {
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel-soft);
+            box-shadow: 0 10px 30px rgba(20, 35, 70, 0.06);
+            margin: 0.8rem 0;
+        }
+
+        .cx-sidebar-status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.44rem 0;
+            color: var(--cx-muted);
+            font-size: 0.82rem;
+            font-weight: 720;
+            border-bottom: 1px solid var(--cx-border);
+        }
+
+        .cx-sidebar-status-row:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .cx-status-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.28rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, 0.14);
+            color: #059669;
+            font-size: 0.72rem;
+            font-weight: 850;
+        }
+
+        .cx-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.72rem 0.82rem;
+            border-radius: 0.8rem;
+            color: var(--cx-muted);
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .cx-nav-item.active {
+            color: var(--cx-ink);
+            background: linear-gradient(180deg, #ffffff, #eef5ff);
+            box-shadow: 0 10px 24px rgba(20, 35, 70, 0.08);
+        }
+
+        .cx-nav-icon {
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.65rem;
+            color: #fff;
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-cyan));
+        }
+
+        [data-testid="stSidebar"] div[role="radiogroup"] {
+            gap: 0.25rem;
+        }
+
+        [data-testid="stSidebar"] div[role="radiogroup"] label {
+            padding: 0.6rem 0.72rem;
+            border-radius: 0.8rem;
+            color: var(--cx-muted);
+            font-weight: 750;
+            transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+        }
+
+        [data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+            background: var(--cx-panel-soft);
+            color: var(--cx-ink);
+        }
+
+        [data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+            background: linear-gradient(180deg, #ffffff, #eef5ff);
+            color: #172033;
+            box-shadow: 0 10px 24px rgba(20, 35, 70, 0.08);
+        }
+
+        [data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) * {
+            color: inherit !important;
         }
 
         .cx-hero {
-            padding: 1.35rem 1.55rem;
-            margin-bottom: 1rem;
-            border: 1px solid rgba(255, 255, 255, 0.72);
-            border-radius: 18px;
+            overflow: hidden;
+            position: relative;
+            padding: 1.55rem 1.75rem;
+            margin-bottom: 1.15rem;
+            border-radius: var(--cx-radius);
             background:
-                linear-gradient(135deg, rgba(11, 31, 58, 0.94), rgba(23, 78, 166, 0.86)),
-                linear-gradient(90deg, rgba(242, 201, 76, 0.18), transparent);
-            box-shadow: 0 18px 45px rgba(23, 78, 166, 0.18);
+                radial-gradient(circle at 88% 18%, rgba(6, 182, 212, 0.25), transparent 28%),
+                linear-gradient(135deg, #172033 0%, #263a7a 54%, #3b82f6 100%);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -8% -42% 46%;
+            height: 230px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            transform: rotate(-10deg);
+        }
+
+        .cx-hero > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .cx-hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+            gap: 1.25rem;
+            align-items: center;
         }
 
         .cx-hero h1 {
             margin: 0 0 0.35rem 0;
             color: #ffffff;
-            font-size: 2.1rem;
+            font-size: 2rem;
             line-height: 1.15;
             font-weight: 760;
             letter-spacing: 0;
@@ -84,32 +251,605 @@ def apply_app_theme():
             font-size: 1rem;
         }
 
-        .cx-agent-banner {
-            padding: 0.85rem 1rem;
-            margin: 0.35rem 0 1rem;
-            border-left: 5px solid var(--cx-yellow-500);
-            border-radius: 12px;
-            background: rgba(255, 247, 214, 0.86);
-            color: var(--cx-blue-900);
-            box-shadow: 0 10px 28px rgba(11, 31, 58, 0.07);
+        .cx-eyebrow {
+            color: var(--cx-blue);
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .cx-hero .cx-eyebrow {
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .cx-command {
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-status-dot {
+            width: 10px;
+            height: 10px;
+            display: inline-block;
+            border-radius: 999px;
+        }
+
+        .cx-dot-green { background: var(--cx-green); }
+        .cx-dot-amber { background: var(--cx-amber); }
+        .cx-dot-red { background: var(--cx-red); }
+
+        .cx-kpi-card {
+            min-height: 132px;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-kpi-label {
+            margin: 0;
+            color: var(--cx-muted);
+            font-size: 0.76rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .cx-kpi-value {
+            margin: 0.45rem 0 0.2rem;
+            color: var(--cx-ink);
+            font-size: 1.75rem;
+            line-height: 1;
+            font-weight: 800;
+        }
+
+        .cx-kpi-trend {
+            color: var(--cx-muted);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .cx-panel {
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-decision-card,
+        .cx-action-card {
+            min-height: 100%;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-decision-card.featured {
+            background:
+                radial-gradient(circle at 90% 12%, rgba(59, 130, 246, 0.16), transparent 28%),
+                var(--cx-panel);
+        }
+
+        .cx-icon-block {
+            width: 42px;
+            height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.9rem;
+            color: #fff;
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
+            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.18);
+            font-size: 0.78rem;
+            font-weight: 850;
+        }
+
+        .cx-card-topline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .cx-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.34rem 0.62rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--cx-blue);
+            font-size: 0.74rem;
+            font-weight: 800;
+        }
+
+        .cx-chip.high {
+            background: rgba(239, 68, 68, 0.12);
+            color: #dc2626;
+        }
+
+        .cx-chip.medium {
+            background: rgba(245, 158, 11, 0.14);
+            color: #d97706;
+        }
+
+        .cx-chip.low {
+            background: rgba(16, 185, 129, 0.13);
+            color: #059669;
+        }
+
+        .cx-action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            margin: 0.65rem 0 1rem;
+        }
+
+        .cx-action-meta {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.6rem;
+            margin-top: 0.85rem;
+        }
+
+        .cx-action-meta div {
+            padding: 0.65rem;
+            border-radius: 0.78rem;
+            background: var(--cx-panel-soft);
+        }
+
+        .cx-action-meta span {
+            display: block;
+            color: var(--cx-muted);
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .cx-action-meta strong {
+            display: block;
+            color: var(--cx-ink);
+            font-size: 0.9rem;
+            margin-top: 0.15rem;
+        }
+
+        .cx-intel-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .cx-segment-card,
+        .cx-signal-panel {
+            min-height: 100%;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-segment-card.featured {
+            background:
+                radial-gradient(circle at 94% 8%, rgba(16, 185, 129, 0.13), transparent 30%),
+                var(--cx-panel);
+        }
+
+        .cx-segment-title {
+            margin: 0 0 0.35rem;
+            color: var(--cx-ink);
+            font-size: 1rem;
+            font-weight: 820;
+        }
+
+        .cx-quote {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-left: 3px solid var(--cx-blue);
+            border-radius: 0.75rem;
+            background: var(--cx-panel-soft);
+            color: var(--cx-muted);
+            font-size: 0.86rem;
+            line-height: 1.45;
+        }
+
+        .cx-token-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.65rem;
+        }
+
+        .cx-token {
+            display: inline-flex;
+            padding: 0.24rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--cx-cyan);
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .cx-signal-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--cx-border);
+        }
+
+        .cx-signal-item:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .cx-signal-item h5 {
+            margin: 0 0 0.25rem;
+            color: var(--cx-ink);
+            font-size: 0.92rem;
+        }
+
+        .cx-signal-item p {
+            margin: 0;
+            font-size: 0.82rem;
+            line-height: 1.42;
+        }
+
+        .cx-graph-detail {
+            min-height: 100%;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-graph-type {
+            display: inline-flex;
+            padding: 0.28rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--cx-blue);
+            font-size: 0.72rem;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .cx-relationship-list {
+            margin: 0.55rem 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .cx-relationship-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--cx-border);
+            font-size: 0.82rem;
+        }
+
+        .cx-relationship-list li:last-child {
+            border-bottom: 0;
+        }
+
+        .cx-graph-outline {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin: 0.8rem 0 1rem;
+        }
+
+        .cx-graph-step {
+            min-height: 88px;
+            padding: 0.75rem;
+            border: 1px solid var(--cx-border);
+            border-radius: 0.85rem;
+            background: var(--cx-panel);
+            box-shadow: 0 8px 22px rgba(20, 35, 70, 0.05);
+        }
+
+        .cx-graph-step span {
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.55rem;
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
+            color: #ffffff;
+            font-size: 0.7rem;
+            font-weight: 850;
+        }
+
+        .cx-graph-step strong {
+            display: block;
+            margin-top: 0.45rem;
+            color: var(--cx-ink);
+            font-size: 0.84rem;
+        }
+
+        .cx-graph-step p {
+            margin: 0.25rem 0 0;
+            font-size: 0.72rem;
+            line-height: 1.35;
+        }
+
+        .cx-graph-key {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin: 0.55rem 0 0.85rem;
+        }
+
+        .cx-graph-key-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.58rem;
+            border: 1px solid var(--cx-border);
+            border-radius: 999px;
+            background: var(--cx-panel);
+            color: var(--cx-muted);
+            font-size: 0.76rem;
+            font-weight: 800;
+            box-shadow: 0 6px 16px rgba(20, 35, 70, 0.04);
+        }
+
+        .cx-key-dot {
+            width: 0.65rem;
+            height: 0.65rem;
+            display: inline-block;
+            border-radius: 999px;
+        }
+
+        .cx-readout-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .cx-readout-card {
+            min-height: 126px;
+            padding: 0.9rem;
+            border: 1px solid var(--cx-border);
+            border-radius: 0.9rem;
+            background: var(--cx-panel);
+            box-shadow: 0 8px 22px rgba(20, 35, 70, 0.05);
+        }
+
+        .cx-readout-card h5 {
+            margin: 0.35rem 0;
+            color: var(--cx-ink);
+            font-size: 0.95rem;
+        }
+
+        .cx-readout-card p {
+            margin: 0;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .cx-impact-card {
+            min-height: 100%;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-impact-card h4 {
+            margin: 0.35rem 0;
+            color: var(--cx-ink);
+            font-size: 1rem;
+        }
+
+        .cx-impact-card p {
+            margin: 0;
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+
+        .cx-impact-path {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 0.8rem;
+            background: var(--cx-panel-soft);
+            color: var(--cx-muted);
+            font-size: 0.82rem;
+        }
+
+        .cx-command-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.85rem;
+            margin: 0.85rem 0 1rem;
+        }
+
+        .cx-command-card {
+            min-height: 164px;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-command-card h4 {
+            margin: 0.45rem 0 0.35rem;
+            color: var(--cx-ink);
+            font-size: 1rem;
+        }
+
+        .cx-command-card p {
+            margin: 0;
+            font-size: 0.82rem;
+            line-height: 1.42;
+        }
+
+        .cx-priority-row {
+            display: grid;
+            grid-template-columns: 64px minmax(0, 1.1fr) minmax(0, 1.25fr) minmax(0, 1.15fr);
+            gap: 0.85rem;
+            align-items: stretch;
+            padding: 0.9rem;
+            margin-bottom: 0.7rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: 0 8px 22px rgba(20, 35, 70, 0.05);
+        }
+
+        .cx-rank-pill {
+            display: inline-flex;
+            width: 46px;
+            height: 46px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.9rem;
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
+            color: #ffffff;
+            font-weight: 850;
+        }
+
+        .cx-priority-row h4 {
+            margin: 0 0 0.3rem;
+            color: var(--cx-ink);
+            font-size: 1rem;
+        }
+
+        .cx-priority-row p {
+            margin: 0;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .cx-action-group {
+            min-height: 100%;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-action-group h4 {
+            margin: 0 0 0.6rem;
+            color: var(--cx-ink);
+        }
+
+        .cx-action-group-item {
+            padding: 0.65rem 0;
+            border-bottom: 1px solid var(--cx-border);
+        }
+
+        .cx-action-group-item:last-child {
+            border-bottom: 0;
+        }
+
+        .cx-action-group-item strong {
+            display: block;
+            color: var(--cx-ink);
+            margin-bottom: 0.2rem;
+        }
+
+        .cx-section-heading {
+            margin: 1.55rem 0 0.72rem;
+            color: var(--cx-ink);
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .cx-page-header {
+            margin: 0.15rem 0 1.15rem;
+            padding-bottom: 0.9rem;
+            border-bottom: 1px solid var(--cx-border);
+        }
+
+        .cx-page-header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .cx-page-header h2 {
+            margin: 0;
+            color: var(--cx-ink);
+            font-size: 1.55rem;
+            line-height: 1.18;
+            font-weight: 840;
+            letter-spacing: 0;
+        }
+
+        .cx-page-header p {
+            max-width: 880px;
+            margin: 0.42rem 0 0;
+            color: var(--cx-muted);
+            font-size: 0.93rem;
+            line-height: 1.48;
+        }
+
+        .cx-table-panel {
+            margin: 1.2rem 0 0.55rem;
+            padding: 0.95rem 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: 0 10px 28px rgba(20, 35, 70, 0.05);
+        }
+
+        .cx-table-panel h4 {
+            margin: 0;
+            color: var(--cx-ink);
+            font-size: 1rem;
+            font-weight: 820;
+        }
+
+        .cx-table-panel p {
+            margin: 0.35rem 0 0;
+            color: var(--cx-muted);
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+
+        .cx-table-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 0.7rem;
+        }
+
+        .cx-table-meta span {
+            display: inline-flex;
+            padding: 0.28rem 0.55rem;
+            border-radius: 999px;
+            background: var(--cx-panel-soft);
+            color: var(--cx-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
         }
 
         div[data-testid="stMetric"] {
             padding: 1rem;
             border: 1px solid var(--cx-border);
-            border-radius: 14px;
-            background: var(--cx-glass);
-            box-shadow: 0 12px 28px rgba(23, 78, 166, 0.08);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
             backdrop-filter: blur(12px);
         }
 
         div[data-testid="stMetric"] label {
-            color: var(--cx-slate-500);
-            font-weight: 650;
+            color: var(--cx-muted);
+            font-weight: 750;
         }
 
         div[data-testid="stMetricValue"] {
-            color: var(--cx-blue-900);
+            color: var(--cx-ink);
             font-weight: 760;
         }
 
@@ -117,71 +857,130 @@ def apply_app_theme():
             gap: 0.35rem;
             padding: 0.35rem;
             border: 1px solid var(--cx-border);
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.72);
-            box-shadow: 0 10px 30px rgba(23, 78, 166, 0.08);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
         }
 
         .stTabs [data-baseweb="tab"] {
-            border-radius: 10px;
-            color: var(--cx-slate-700);
-            font-weight: 650;
+            border-radius: 0.8rem;
+            color: var(--cx-muted);
+            font-weight: 750;
         }
 
         .stTabs [aria-selected="true"] {
-            background: var(--cx-blue-700);
+            background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
             color: #ffffff;
         }
 
         div[data-testid="stExpander"] {
             border: 1px solid var(--cx-border);
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.8);
-            box-shadow: 0 8px 24px rgba(23, 78, 166, 0.06);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: 0 8px 24px rgba(20, 35, 70, 0.06);
         }
 
         div[data-testid="stDataFrame"] {
             border: 1px solid var(--cx-border);
-            border-radius: 14px;
+            border-radius: var(--cx-radius);
             overflow: hidden;
-            box-shadow: 0 12px 28px rgba(23, 78, 166, 0.07);
+            box-shadow: var(--cx-shadow);
+        }
+
+        div[data-testid="stPlotlyChart"] {
+            padding: 0.35rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: var(--cx-shadow);
         }
 
         .stButton > button,
         .stDownloadButton > button {
-            border: 1px solid rgba(23, 78, 166, 0.22);
-            border-radius: 10px;
+            border: 1px solid rgba(59, 130, 246, 0.22);
+            border-radius: 0.85rem;
             background: linear-gradient(180deg, #ffffff, #edf5ff);
-            color: var(--cx-blue-900);
-            font-weight: 700;
+            color: #172033 !important;
+            font-weight: 800;
+            box-shadow: 0 8px 18px rgba(20, 35, 70, 0.06);
+        }
+
+        .stButton > button *,
+        .stDownloadButton > button * {
+            color: #172033 !important;
         }
 
         .stButton > button:hover,
         .stDownloadButton > button:hover {
-            border-color: var(--cx-blue-500);
-            color: var(--cx-blue-700);
-            box-shadow: 0 8px 20px rgba(47, 125, 225, 0.16);
+            border-color: var(--cx-blue);
+            color: #174ea6 !important;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.16);
+        }
+
+        .stButton > button:hover *,
+        .stDownloadButton > button:hover * {
+            color: #174ea6 !important;
         }
 
         div[data-testid="stChatMessage"] {
             border: 1px solid var(--cx-border);
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.72);
-            box-shadow: 0 8px 20px rgba(23, 78, 166, 0.06);
+            border-radius: var(--cx-radius);
+            background: var(--cx-panel);
+            box-shadow: 0 8px 20px rgba(20, 35, 70, 0.06);
         }
 
         div[data-testid="stAlert"] {
-            border-radius: 14px;
+            border-radius: var(--cx-radius);
             border: 1px solid var(--cx-border);
         }
 
         h2, h3 {
-            color: var(--cx-blue-900);
+            color: var(--cx-ink);
             letter-spacing: 0;
         }
 
         p, li, label {
-            color: var(--cx-slate-700);
+            color: var(--cx-muted);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --cx-ink: #f8fafc;
+                --cx-muted: #cbd5e1;
+                --cx-subtle: #94a3b8;
+                --cx-panel: rgba(31, 42, 68, 0.86);
+                --cx-panel-solid: #172033;
+                --cx-panel-soft: rgba(31, 42, 68, 0.72);
+                --cx-border: rgba(148, 163, 184, 0.18);
+                --cx-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+            }
+
+            .stApp {
+                background:
+                    radial-gradient(circle at 8% 8%, rgba(59, 130, 246, 0.14), transparent 26rem),
+                    linear-gradient(180deg, #0f172a 0%, #111827 100%);
+            }
+
+            [data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+                background: linear-gradient(135deg, var(--cx-blue), var(--cx-violet));
+                color: #ffffff;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .cx-hero-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cx-action-grid,
+            .cx-action-meta,
+            .cx-intel-grid,
+            .cx-graph-outline,
+            .cx-readout-grid,
+            .cx-command-grid,
+            .cx-priority-row {
+                grid-template-columns: 1fr;
+            }
         }
         </style>
         """,
@@ -191,20 +990,2923 @@ def apply_app_theme():
 
 apply_app_theme()
 
-st.markdown(
-    """
-    <section class="cx-hero">
-        <h1>CX-Intel: Customer Experience Intelligence</h1>
-        <p>Service feedback discovery, action intelligence, and AI-assisted decision support.</p>
-    </section>
-    <div class="cx-agent-banner">
-        <strong>M5 AI Agent enabled.</strong>
-        CX-Intel converts clusters, sentiment, keywords, root-cause signals, and cascades
-        into prioritized management actions.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+def render_sidebar():
+    """Render Soft UI-inspired PX-Intel navigation context."""
+    with st.sidebar:
+        st.markdown(
+            """
+            <div class="cx-brand-row">
+                <div class="cx-brand-mark">PX</div>
+                <div>
+                    <div class="cx-brand-title">PX-Intel</div>
+                    <div class="cx-brand-subtitle">Experience intelligence</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        nav_labels = {
+            "Overview": "01  Overview",
+            "Customer Intelligence": "02  Customer Intelligence",
+            "Cause & Effect Graph": "03  Cause & Effect Graph",
+            "Cluster Analysis": "04  Cluster Analysis",
+            "Operational Impact": "05  Operational Impact",
+            "Reports & Export": "06  Reports & Export",
+        }
+        selected_section = st.radio(
+            "Workspace",
+            options=list(nav_labels.keys()),
+            format_func=lambda section: nav_labels[section],
+            label_visibility="collapsed",
+            key="cx_sidebar_section",
+        )
+
+        st.markdown(
+            """
+            <div class="cx-sidebar-card">
+                <div class="cx-card-topline" style="margin-bottom:0.55rem;">
+                    <div>
+                        <div class="cx-eyebrow">System status</div>
+                        <h4 style="margin: 0.25rem 0 0;">M5 Action Agent online</h4>
+                    </div>
+                    <span class="cx-status-pill">Live</span>
+                </div>
+                <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-green"></span><span>Feedback ingestion ready</span></div>
+                <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-amber"></span><span>Cluster audit cache enabled</span></div>
+                <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-red"></span><span>High-priority issues surfaced first</span></div>
+                <p style="font-size: 0.8rem; margin:0.72rem 0 0;">M4 + M5 pipeline is preserved across every workspace.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return selected_section
+
+
+def render_hero():
+    st.markdown(
+        """
+        <section class="cx-hero">
+            <div class="cx-hero-grid">
+                <div>
+                    <p class="cx-eyebrow">PX-Intel AI business intelligence</p>
+                    <h1>Turn feedback clusters into faster service decisions.</h1>
+                    <p>Service feedback discovery, customer intelligence, operational impact, and AI-assisted action support powered by the existing PX-Intel pipeline.</p>
+                </div>
+                <div>
+                    <div class="cx-command">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+                            <div>
+                                <div class="cx-eyebrow">System status</div>
+                                <h4 style="margin:0.15rem 0 0;">M5 Action Agent online</h4>
+                            </div>
+                            <span style="padding:0.32rem 0.6rem; border-radius:999px; background:rgba(16,185,129,0.14); color:#059669; font-weight:800; font-size:0.75rem;">Live</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.55rem;"><span class="cx-status-dot cx-dot-green"></span><span>Feedback ingestion ready</span></div>
+                        <div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.55rem;"><span class="cx-status-dot cx-dot-amber"></span><span>Cluster audit cache enabled</span></div>
+                        <div style="display:flex; align-items:center; gap:0.55rem;"><span class="cx-status-dot cx-dot-red"></span><span>High-priority issues surfaced first</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_kpi_card(label, value, trend, accent):
+    st.markdown(
+        f"""
+        <div class="cx-kpi-card">
+            <p class="cx-kpi-label">{label}</p>
+            <div class="cx-kpi-value">{value}</div>
+            <div class="cx-kpi-trend" style="color:{accent};">{trend}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_page_header(title, subtitle=None, chip=None):
+    chip_html = f'<span class="cx-chip">{escape(chip)}</span>' if chip else ""
+    subtitle_html = f"<p>{escape(subtitle)}</p>" if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="cx-page-header">
+            <div class="cx-page-header-top">
+                <h2>{escape(title)}</h2>
+                {chip_html}
+            </div>
+            {subtitle_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_table_header(title, description, data_frame, accent_label="Report table"):
+    row_count = 0 if data_frame is None else len(data_frame)
+    column_count = 0 if data_frame is None else len(data_frame.columns)
+    st.markdown(
+        f"""
+        <div class="cx-table-panel">
+            <div class="cx-card-topline" style="margin-bottom:0;">
+                <div>
+                    <p class="cx-eyebrow" style="margin:0 0 0.25rem;">{escape(accent_label)}</p>
+                    <h4>{escape(title)}</h4>
+                </div>
+                <span class="cx-chip">{row_count:,} rows</span>
+            </div>
+            <p>{escape(description)}</p>
+            <div class="cx-table-meta">
+                <span>{row_count:,} records</span>
+                <span>{column_count:,} columns</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_table_section(
+    title,
+    description,
+    data_frame,
+    empty_message,
+    accent_label="Report table",
+    expanded=False,
+    height=360,
+):
+    render_table_header(title, description, data_frame, accent_label)
+    if data_frame is None or data_frame.empty:
+        st.info(empty_message)
+        return
+
+    with st.expander(f"Open {title.lower()}", expanded=expanded):
+        st.dataframe(data_frame, width="stretch", hide_index=True, height=height)
+
+
+def priority_class(priority_label):
+    if priority_label.startswith("HIGH"):
+        return "high"
+    if priority_label.startswith("MEDIUM"):
+        return "medium"
+    return "low"
+
+
+def render_decision_summary_card(top_insight, insight_count, high_count, medium_count):
+    if top_insight is None:
+        st.markdown(
+            """
+            <div class="cx-decision-card featured">
+                <div class="cx-card-topline">
+                    <span class="cx-icon-block">AI</span>
+                    <span class="cx-chip">No clusters</span>
+                </div>
+                <h3 style="margin:0 0 0.5rem;">No action insight is available yet.</h3>
+                <p style="margin:0;">Run the PX-Intel pipeline with feedback data to populate decision support.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    theme = escape(top_insight.issue_theme.title())
+    insight = escape(top_insight.key_insight)
+    action = escape(top_insight.recommended_action)
+    badge_class = priority_class(top_insight.priority_label)
+    st.markdown(
+        f"""
+        <div class="cx-decision-card featured">
+            <div class="cx-card-topline">
+                <span class="cx-icon-block">AI</span>
+                <span class="cx-chip {badge_class}">{escape(top_insight.priority_label)}</span>
+            </div>
+            <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Recommended first move</p>
+            <h3 style="margin:0 0 0.5rem;">Cluster {top_insight.cluster_id}: {theme}</h3>
+            <p style="margin:0 0 0.65rem;">{insight}</p>
+            <div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem;">
+                <strong style="color:var(--cx-ink);">Action:</strong>
+                <span>{action}</span>
+            </div>
+            <div class="cx-action-meta">
+                <div><span>Total insights</span><strong>{insight_count}</strong></div>
+                <div><span>High priority</span><strong>{high_count}</strong></div>
+                <div><span>Medium priority</span><strong>{medium_count}</strong></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_action_outline_card(insight, index):
+    badge_class = priority_class(insight.priority_label)
+    keywords = ", ".join(insight.keywords[:4]) if insight.keywords else "No keywords"
+    st.markdown(
+        f"""
+        <div class="cx-action-card">
+            <div class="cx-card-topline">
+                <span class="cx-icon-block">P{index}</span>
+                <span class="cx-chip {badge_class}">{escape(insight.priority_label)}</span>
+            </div>
+            <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Customer experience action</p>
+            <h4 style="margin:0 0 0.35rem;">Cluster {insight.cluster_id}: {escape(insight.issue_theme.title())}</h4>
+            <p style="margin:0 0 0.75rem;">{escape(insight.key_insight)}</p>
+            <div class="cx-action-meta">
+                <div><span>Size</span><strong>{insight.metadata.get("cluster_size", 0):,}</strong></div>
+                <div><span>Negative</span><strong>{insight.metadata.get("negative_rate", 0):.0%}</strong></div>
+                <div><span>Score</span><strong>{insight.priority_score:.3f}</strong></div>
+            </div>
+            <div style="margin-top:0.8rem;">
+                <p style="margin:0 0 0.3rem;"><strong style="color:var(--cx-ink);">Keywords:</strong> {escape(keywords)}</p>
+                <p style="margin:0;"><strong style="color:var(--cx-ink);">Root cause:</strong> {escape(insight.root_cause)}</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def customer_lens_for_insight(insight):
+    negative_rate = insight.metadata.get("negative_rate", 0)
+    if insight.priority_label.startswith("HIGH") or negative_rate >= 0.4:
+        return "At Risk"
+    if insight.sentiment_label == "POSITIVE" or negative_rate <= 0.2:
+        return "Opportunity"
+    return "Mixed"
+
+
+def render_customer_segment_card(insight, index):
+    lens = customer_lens_for_insight(insight)
+    lens_class = "high" if lens == "At Risk" else "low" if lens == "Opportunity" else "medium"
+    keywords = insight.keywords[:4] if insight.keywords else ["general experience"]
+    keyword_tokens = "".join(
+        f'<span class="cx-token">{escape(keyword.title())}</span>'
+        for keyword in keywords
+    )
+    negative_rate = insight.metadata.get("negative_rate", 0)
+    cluster_share = insight.metadata.get("cluster_share", 0)
+    example = escape(insight.example_feedback)
+
+    st.markdown(
+        f"""
+        <div class="cx-segment-card {'featured' if index == 1 else ''}">
+            <div class="cx-card-topline">
+                <span class="cx-icon-block">CI{index}</span>
+                <span class="cx-chip {lens_class}">{escape(lens)}</span>
+            </div>
+            <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Customer segment</p>
+            <h4 class="cx-segment-title">Customers affected by {escape(insight.issue_theme.title())}</h4>
+            <p style="margin:0 0 0.7rem;">{escape(insight.key_insight)}</p>
+            <div class="cx-action-meta">
+                <div><span>Feedback</span><strong>{insight.metadata.get("cluster_size", 0):,}</strong></div>
+                <div><span>Negative</span><strong>{negative_rate:.0%}</strong></div>
+                <div><span>Share</span><strong>{cluster_share:.0%}</strong></div>
+            </div>
+            <div class="cx-token-row">{keyword_tokens}</div>
+            <div class="cx-quote">"{example}"</div>
+            <div style="margin-top:0.75rem;">
+                <strong style="color:var(--cx-ink);">Suggested move:</strong>
+                <span>{escape(insight.recommended_action)}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_customer_signal_panel(title, subtitle, insights):
+    if not insights:
+        body = '<div class="cx-signal-item"><p>No matching customer signals found yet.</p></div>'
+    else:
+        items = []
+        for insight in insights[:4]:
+            negative_rate = insight.metadata.get("negative_rate", 0)
+            items.append(
+                '<div class="cx-signal-item">'
+                f'<h5>Cluster {insight.cluster_id}: {escape(insight.issue_theme.title())}</h5>'
+                f"<p>{escape(insight.key_insight)}</p>"
+                '<div class="cx-token-row">'
+                f'<span class="cx-token">{escape(insight.priority_label)}</span>'
+                f'<span class="cx-token">{negative_rate:.0%} negative</span>'
+                "</div>"
+                "</div>"
+            )
+        body = "".join(items)
+
+    st.markdown(
+        '<div class="cx-signal-panel">'
+        f'<p class="cx-eyebrow" style="margin-bottom:0.35rem;">{escape(subtitle)}</p>'
+        f'<h4 style="margin:0 0 0.55rem;">{escape(title)}</h4>'
+        f"{body}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def build_customer_voice_dataframe(insights):
+    return pd.DataFrame(
+        [
+            {
+                "Cluster": insight.cluster_id,
+                "Customer Segment": f"Customers affected by {insight.issue_theme.title()}",
+                "Signal Type": customer_lens_for_insight(insight),
+                "Sentiment": insight.sentiment_label.title(),
+                "Priority": insight.priority_label,
+                "Negative Rate": f"{insight.metadata.get('negative_rate', 0):.0%}",
+                "Representative Feedback": insight.example_feedback,
+                "Recommended Action": insight.recommended_action,
+            }
+            for insight in insights
+        ]
+    )
+
+
+def filter_customer_insights(insights, lens, query):
+    filtered = [
+        insight
+        for insight in insights
+        if lens == "All" or customer_lens_for_insight(insight) == lens
+    ]
+
+    normalized_query = query.strip().lower()
+    if not normalized_query:
+        return filtered
+
+    return [
+        insight
+        for insight in filtered
+        if normalized_query
+        in " ".join(
+            [
+                insight.issue_theme,
+                insight.key_insight,
+                insight.example_feedback,
+                insight.recommended_action,
+                " ".join(insight.keywords),
+            ]
+        ).lower()
+    ]
+
+
+def render_customer_intelligence_graphics(insights):
+    st.markdown(
+        '<h4 class="cx-section-heading">At-A-Glance Signal Graphics</h4>',
+        unsafe_allow_html=True,
+    )
+
+    if not insights:
+        st.info("No customer intelligence graphics are available for the current filter.")
+        return
+
+    signal_order = ["At Risk", "Mixed", "Opportunity"]
+    signal_colors = {
+        "At Risk": "#ef4444",
+        "Mixed": "#f59e0b",
+        "Opportunity": "#10b981",
+    }
+    signal_counts = pd.Series(
+        [customer_lens_for_insight(insight) for insight in insights]
+    ).value_counts()
+    signal_values = [int(signal_counts.get(signal, 0)) for signal in signal_order]
+
+    chart_col1, chart_col2 = st.columns([1, 1.25])
+    with chart_col1:
+        fig = go.Figure(
+            data=[
+                go.Pie(
+                    labels=signal_order,
+                    values=signal_values,
+                    hole=0.62,
+                    marker=dict(
+                        colors=[signal_colors[signal] for signal in signal_order],
+                        line=dict(color="white", width=2),
+                    ),
+                    textinfo="label+percent",
+                    hovertemplate="<b>%{label}</b><br>Segments: %{value}<extra></extra>",
+                )
+            ]
+        )
+        fig.update_layout(title="Customer Signal Mix", legend_title="Signal Type")
+        apply_plotly_soft_ui(fig, height=340)
+        st.plotly_chart(fig, width="stretch")
+
+    with chart_col2:
+        top_risk_rows = sorted(
+            insights,
+            key=lambda insight: (
+                insight.metadata.get("negative_rate", 0),
+                insight.priority_score,
+            ),
+            reverse=True,
+        )[:6]
+        bar_labels = [
+            f"C{insight.cluster_id}: {insight.issue_theme.title()}"
+            for insight in top_risk_rows
+        ]
+        negative_rates = [
+            insight.metadata.get("negative_rate", 0) for insight in top_risk_rows
+        ]
+        bar_colors = [
+            signal_colors[customer_lens_for_insight(insight)]
+            for insight in top_risk_rows
+        ]
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=negative_rates,
+                    y=bar_labels,
+                    orientation="h",
+                    marker=dict(color=bar_colors),
+                    text=[f"{rate:.0%}" for rate in negative_rates],
+                    textposition="auto",
+                    hovertemplate="<b>%{y}</b><br>Negative Rate: %{x:.0%}<extra></extra>",
+                )
+            ]
+        )
+        fig.update_layout(
+            title="Risk Intensity By Segment",
+            xaxis_title="Negative feedback rate",
+            yaxis_title=None,
+            xaxis_tickformat=".0%",
+            yaxis=dict(autorange="reversed"),
+        )
+        apply_plotly_soft_ui(fig, height=340, showlegend=False)
+        st.plotly_chart(fig, width="stretch")
+
+
+def render_customer_intelligence(audit_engine, action_insights, texts):
+    render_page_header(
+        "Customer Intelligence",
+        "A business-facing view of customer segments, risk signals, opportunities, and source evidence from the existing PX-Intel pipeline.",
+        "Customer view",
+    )
+
+    red_count = len(audit_engine.get_red_zones())
+    green_count = len(audit_engine.get_green_zones())
+    neutral_count = len(audit_engine.get_neutral_zones())
+    top_theme = (
+        action_insights[0].issue_theme.title() if action_insights else "No theme yet"
+    )
+    avg_negative = (
+        np.mean([item.metadata.get("negative_rate", 0) for item in action_insights])
+        if action_insights
+        else 0
+    )
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    with metric_col1:
+        render_kpi_card("Feedback Reviewed", f"{len(texts):,}", "Voice-of-customer base", "#3b82f6")
+    with metric_col2:
+        render_kpi_card("At-Risk Segments", red_count, "Negative-dominant clusters", "#ef4444")
+    with metric_col3:
+        render_kpi_card("Opportunity Segments", green_count, "Positive-dominant clusters", "#10b981")
+    with metric_col4:
+        render_kpi_card("Top Customer Theme", top_theme, f"{avg_negative:.0%} avg negative", "#8b5cf6")
+
+    control_col1, control_col2, download_col = st.columns([1.1, 1.35, 0.95])
+    with control_col1:
+        customer_lens = st.segmented_control(
+            "Customer signal lens",
+            options=["All", "At Risk", "Opportunity", "Mixed"],
+            default="All",
+            key="customer_intelligence_lens",
+        )
+    with control_col2:
+        customer_search = st.text_input(
+            "Search customer themes or feedback",
+            placeholder="Search issue, keyword, quote, or action...",
+            key="customer_intelligence_search",
+        )
+
+    visible_insights = filter_customer_insights(
+        action_insights,
+        customer_lens,
+        customer_search,
+    )
+    voice_df = build_customer_voice_dataframe(visible_insights)
+    with download_col:
+        st.download_button(
+            "Download CSV",
+            data=voice_df.to_csv(index=False),
+            file_name="px_intel_customer_intelligence.csv",
+            mime="text/csv",
+            help="Download the currently filtered customer intelligence data.",
+            width="stretch",
+        )
+
+    current_filter_state = (customer_lens, customer_search)
+    if st.session_state.get("customer_intel_filter_state") != current_filter_state:
+        st.session_state.customer_intel_filter_state = current_filter_state
+        st.session_state.customer_intel_page = 0
+
+    render_customer_intelligence_graphics(visible_insights)
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Customer Segment Intelligence</h4>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"Showing {len(visible_insights)} customer segment signals from the current PX-Intel analysis."
+    )
+
+    if visible_insights:
+        page_size = 4
+        total_pages = max(1, int(np.ceil(len(visible_insights) / page_size)))
+        current_page = min(
+            st.session_state.get("customer_intel_page", 0),
+            total_pages - 1,
+        )
+        st.session_state.customer_intel_page = current_page
+        page_start = current_page * page_size
+        page_end = page_start + page_size
+        page_insights = visible_insights[page_start:page_end]
+
+        nav_left, nav_mid, nav_right = st.columns([1, 2, 1])
+        with nav_left:
+            if st.button(
+                "Previous",
+                key="customer_segments_previous",
+                disabled=current_page == 0,
+                width="stretch",
+            ):
+                st.session_state.customer_intel_page = max(current_page - 1, 0)
+                st.rerun()
+        with nav_mid:
+            st.markdown(
+                f"""
+                <div class="cx-panel-soft" style="padding:0.65rem; border-radius:0.85rem; text-align:center;">
+                    Showing segments {page_start + 1}-{min(page_end, len(visible_insights))} of {len(visible_insights)}
+                    &nbsp;|&nbsp; Page {current_page + 1} of {total_pages}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with nav_right:
+            if st.button(
+                "Next",
+                key="customer_segments_next",
+                disabled=current_page >= total_pages - 1,
+                width="stretch",
+            ):
+                st.session_state.customer_intel_page = min(
+                    current_page + 1,
+                    total_pages - 1,
+                )
+                st.rerun()
+
+        for start in range(0, len(page_insights), 2):
+            segment_cols = st.columns(2)
+            for offset, segment_col in enumerate(segment_cols):
+                segment_index = start + offset
+                if segment_index >= len(page_insights):
+                    continue
+                with segment_col:
+                    render_customer_segment_card(
+                        page_insights[segment_index],
+                        page_start + segment_index + 1,
+                    )
+    else:
+        st.info("No customer segments match the current lens or search.")
+
+    risk_insights = sorted(
+        [
+            insight
+            for insight in action_insights
+            if customer_lens_for_insight(insight) == "At Risk"
+        ],
+        key=lambda insight: (
+            insight.metadata.get("negative_rate", 0),
+            insight.priority_score,
+        ),
+        reverse=True,
+    )
+    opportunity_insights = sorted(
+        [
+            insight
+            for insight in action_insights
+            if customer_lens_for_insight(insight) == "Opportunity"
+        ],
+        key=lambda insight: (
+            1 - insight.metadata.get("negative_rate", 0),
+            insight.metadata.get("cluster_share", 0),
+        ),
+        reverse=True,
+    )
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Risk & Opportunity Signals</h4>',
+        unsafe_allow_html=True,
+    )
+    risk_col, opportunity_col = st.columns(2)
+    with risk_col:
+        render_customer_signal_panel(
+            "Customer Risk Signals",
+            "Friction to reduce",
+            risk_insights,
+        )
+    with opportunity_col:
+        render_customer_signal_panel(
+            "Customer Opportunity Signals",
+            "Strengths to expand",
+            opportunity_insights,
+        )
+
+    render_table_section(
+        "Voice Of Customer Explorer",
+        "Filtered source evidence behind the visible customer segments, risk signals, and recommended actions.",
+        voice_df,
+        "No source evidence is available for the current filter.",
+        accent_label="Evidence table",
+    )
+
+
+def shorten_text(value, limit=72):
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 3, 0)].rstrip() + "..."
+
+
+def find_date_column(df):
+    date_hints = ("date", "time", "created", "submitted", "timestamp")
+    for column in df.columns:
+        if any(hint in str(column).lower() for hint in date_hints):
+            parsed = pd.to_datetime(df[column], errors="coerce")
+            if parsed.notna().any():
+                return column
+    return None
+
+
+def filter_insights_by_time_period(
+    insights, df, cluster_assignments, date_column, period, custom_range
+):
+    if period == "All Time":
+        return insights, None
+
+    if date_column is None:
+        return (
+            insights,
+            "Current feedback data has no timestamp column, so the time filter is using all records.",
+        )
+
+    dates = pd.to_datetime(df[date_column], errors="coerce")
+    if dates.notna().sum() == 0:
+        return (
+            insights,
+            f"The `{date_column}` column could not be parsed as dates, so the graph is using all records.",
+        )
+
+    latest_date = dates.max().normalize()
+    if period == "Last 7 Days":
+        start_date = latest_date - pd.Timedelta(days=7)
+        end_date = latest_date
+    elif period == "Last 30 Days":
+        start_date = latest_date - pd.Timedelta(days=30)
+        end_date = latest_date
+    elif period == "Last 90 Days":
+        start_date = latest_date - pd.Timedelta(days=90)
+        end_date = latest_date
+    else:
+        if not custom_range or len(custom_range) != 2:
+            return insights, "Choose a valid custom date range to filter the graph."
+        start_date = pd.Timestamp(custom_range[0])
+        end_date = pd.Timestamp(custom_range[1])
+
+    mask = dates.between(start_date, end_date, inclusive="both")
+    assignment_array = np.array(cluster_assignments)
+    if len(assignment_array) != len(df):
+        return (
+            insights,
+            "Cluster assignments and source rows are not aligned, so the time filter is using all records.",
+        )
+
+    visible_clusters = set(assignment_array[mask.fillna(False).to_numpy()].tolist())
+    filtered = [insight for insight in insights if insight.cluster_id in visible_clusters]
+    return (
+        filtered,
+        f"Time filter applied from {start_date.date()} to {end_date.date()} using `{date_column}`.",
+    )
+
+
+def filter_cause_effect_insights(
+    action_insights,
+    sentiment_filter,
+    priority_filter,
+    cluster_filter,
+    theme_filter,
+):
+    filtered = list(action_insights)
+    if sentiment_filter != "All":
+        filtered = [
+            insight
+            for insight in filtered
+            if str(insight.sentiment_label).title() == sentiment_filter
+        ]
+    if priority_filter != "All":
+        filtered = [
+            insight for insight in filtered if insight.priority_label == priority_filter
+        ]
+    if cluster_filter != "All":
+        filtered = [
+            insight
+            for insight in filtered
+            if f"Cluster {insight.cluster_id}" == cluster_filter
+        ]
+    if theme_filter != "All":
+        filtered = [
+            insight
+            for insight in filtered
+            if insight.issue_theme.title() == theme_filter
+        ]
+    return filtered
+
+
+def apply_graph_density(insights, density, cluster_filter):
+    if cluster_filter != "All" or density == "All Matching":
+        return insights
+    limit = 3 if density == "Top 3" else 5
+    return sorted(insights, key=lambda insight: insight.priority_score, reverse=True)[
+        :limit
+    ]
+
+
+def node_type_label(node_type):
+    return node_type.replace("_", " ").title()
+
+
+def graph_node_marker_label(node):
+    label_map = {
+        "feedback": "FB",
+        "theme": "TH",
+        "root_cause": "RC",
+        "issue": "ISS",
+        "customer_segment": "SEG",
+        "sentiment": "SNT",
+        "impact": "RISK",
+        "action": "ACT",
+    }
+    return f"C{node['cluster_id']}<br>{label_map.get(node['type'], 'NODE')}"
+
+
+def add_graph_node(
+    nodes,
+    node_id,
+    label,
+    node_type,
+    cluster_id,
+    x,
+    y,
+    color,
+    size,
+    description,
+    evidence,
+    recommended_action,
+    priority,
+    priority_score,
+    sentiment,
+    root_cause,
+    issue_theme,
+):
+    nodes[node_id] = {
+        "id": node_id,
+        "label": label,
+        "display": shorten_text(label, 28),
+        "type": node_type,
+        "cluster_id": cluster_id,
+        "x": x,
+        "y": y,
+        "color": color,
+        "size": size,
+        "description": description,
+        "evidence": evidence,
+        "recommended_action": recommended_action,
+        "priority": priority,
+        "priority_score": priority_score,
+        "sentiment": sentiment,
+        "root_cause": root_cause,
+        "issue_theme": issue_theme,
+    }
+
+
+def add_graph_edge(edges, source, target, relation, weight, description):
+    edges.append(
+        {
+            "source": source,
+            "target": target,
+            "relation": relation,
+            "weight": weight,
+            "description": description,
+        }
+    )
+
+
+def build_cause_effect_graph(action_insights, causal_engine):
+    nodes = {}
+    edges = []
+    visible_cluster_ids = {insight.cluster_id for insight in action_insights}
+    sentiment_colors = {
+        "NEGATIVE": "#dc2626",
+        "NEUTRAL": "#d97706",
+        "POSITIVE": "#059669",
+    }
+    priority_colors = {
+        "HIGH": "#dc2626",
+        "MEDIUM": "#d97706",
+        "LOW": "#059669",
+    }
+
+    for row_index, insight in enumerate(action_insights):
+        cluster_id = insight.cluster_id
+        y_base = -row_index * 2.05
+        priority_key = insight.priority_label.split()[0]
+        sentiment_key = str(insight.sentiment_label).upper()
+        impact_color = priority_colors.get(priority_key, "#64748b")
+        sentiment_color = sentiment_colors.get(sentiment_key, "#64748b")
+        node_size = 24 + min(insight.metadata.get("cluster_size", 0), 45) * 0.2
+        common = {
+            "cluster_id": cluster_id,
+            "evidence": insight.example_feedback,
+            "recommended_action": insight.recommended_action,
+            "priority": insight.priority_label,
+            "priority_score": insight.priority_score,
+            "sentiment": insight.sentiment_label,
+            "root_cause": insight.root_cause,
+            "issue_theme": insight.issue_theme,
+        }
+
+        feedback_id = f"feedback-{cluster_id}"
+        theme_id = f"theme-{cluster_id}"
+        issue_id = f"issue-{cluster_id}"
+        root_id = f"root-{cluster_id}"
+        segment_id = f"segment-{cluster_id}"
+        sentiment_id = f"sentiment-{cluster_id}"
+        impact_id = f"impact-{cluster_id}"
+        action_id = f"action-{cluster_id}"
+
+        add_graph_node(
+            nodes,
+            feedback_id,
+            f"Feedback C{cluster_id}",
+            "feedback",
+            x=0,
+            y=y_base,
+            color="#475569",
+            size=24,
+            description="Representative customer feedback used as graph evidence.",
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            theme_id,
+            f"Theme: {insight.issue_theme.title()}",
+            "theme",
+            x=1.25,
+            y=y_base + 0.22,
+            color="#0891b2",
+            size=node_size + 2,
+            description="Model-derived theme from cluster vocabulary.",
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            root_id,
+            f"Root Cause: {shorten_text(insight.root_cause, 42)}",
+            "root_cause",
+            x=2.45,
+            y=y_base - 0.28,
+            color="#7c3aed",
+            size=26,
+            description="Probable cause inferred from M3 causal validation and keywords.",
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            issue_id,
+            f"Issue C{cluster_id}: {insight.issue_theme.title()}",
+            "issue",
+            x=3.35,
+            y=y_base + 0.18,
+            color="#d97706",
+            size=node_size + 3,
+            description=insight.key_insight,
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            segment_id,
+            f"Segment C{cluster_id}",
+            "customer_segment",
+            x=4.75,
+            y=y_base + 0.28,
+            color="#2563eb",
+            size=node_size + 1,
+            description=f"Customers affected by {insight.issue_theme.title()}.",
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            sentiment_id,
+            f"Sentiment: {insight.sentiment_label.title()}",
+            "sentiment",
+            x=4.75,
+            y=y_base - 0.36,
+            color=sentiment_color,
+            size=24,
+            description=(
+                f"{insight.metadata.get('negative_rate', 0):.0%} of this cluster is negative."
+            ),
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            impact_id,
+            f"Impact: {insight.priority_label}",
+            "impact",
+            x=6.1,
+            y=y_base + 0.2,
+            color=impact_color,
+            size=24 + insight.priority_score * 24,
+            description=f"Priority score {insight.priority_score:.3f}.",
+            **common,
+        )
+        add_graph_node(
+            nodes,
+            action_id,
+            f"Action: {shorten_text(insight.recommended_action, 42)}",
+            "action",
+            x=7.25,
+            y=y_base - 0.42,
+            color="#059669",
+            size=26,
+            description="Recommended mitigation action from the PX-Intel action agent.",
+            **common,
+        )
+
+        add_graph_edge(
+            edges,
+            feedback_id,
+            theme_id,
+            "feedback_mentions_theme",
+            0.7,
+            "Representative feedback mentions the discovered customer theme.",
+        )
+        add_graph_edge(
+            edges,
+            theme_id,
+            issue_id,
+            "theme_contributes_to_issue",
+            0.85,
+            "The theme contributes to the issue pattern surfaced by the cluster.",
+        )
+        add_graph_edge(
+            edges,
+            root_id,
+            issue_id,
+            "root_cause_drives_issue",
+            0.75,
+            "The probable root cause helps explain the issue pattern.",
+        )
+        add_graph_edge(
+            edges,
+            issue_id,
+            segment_id,
+            "issue_impacts_segment",
+            insight.metadata.get("cluster_share", 0),
+            "The issue impacts this customer segment.",
+        )
+        add_graph_edge(
+            edges,
+            issue_id,
+            sentiment_id,
+            "issue_has_sentiment",
+            insight.metadata.get("negative_rate", 0),
+            "The issue is associated with this sentiment profile.",
+        )
+        add_graph_edge(
+            edges,
+            issue_id,
+            impact_id,
+            "issue_escalates_to_risk",
+            insight.priority_score,
+            "The issue escalates into operational priority or risk.",
+        )
+        add_graph_edge(
+            edges,
+            issue_id,
+            action_id,
+            "action_mitigates_issue",
+            0.9,
+            "The recommended action is intended to mitigate the issue.",
+        )
+
+    for insight in action_insights:
+        source_issue = f"issue-{insight.cluster_id}"
+        for cascade in getattr(causal_engine, "cascade_predictions", {}).get(
+            insight.cluster_id, []
+        )[:3]:
+            target_cluster = int(cascade.get("target_cluster", -1))
+            target_segment = f"segment-{target_cluster}"
+            if target_cluster not in visible_cluster_ids or target_segment not in nodes:
+                continue
+            add_graph_edge(
+                edges,
+                source_issue,
+                target_segment,
+                "issue_impacts_segment",
+                cascade.get("cascade_likelihood", 0),
+                (
+                    f"Shared-pattern cascade: fixing Cluster {insight.cluster_id} "
+                    f"may affect Cluster {target_cluster}."
+                ),
+            )
+
+    return nodes, edges
+
+
+def create_cause_effect_figure(nodes, edges):
+    edge_styles = {
+        "feedback_mentions_theme": ("#94a3b8", "Feedback mentions theme"),
+        "theme_contributes_to_issue": ("#06b6d4", "Theme contributes to issue"),
+        "root_cause_drives_issue": ("#8b5cf6", "Root cause drives issue"),
+        "issue_impacts_segment": ("#3b82f6", "Issue impacts segment"),
+        "issue_has_sentiment": ("#64748b", "Issue sentiment"),
+        "issue_escalates_to_risk": ("#ef4444", "Issue escalates to risk"),
+        "action_mitigates_issue": ("#10b981", "Action mitigates issue"),
+    }
+    node_type_order = [
+        "feedback",
+        "theme",
+        "root_cause",
+        "issue",
+        "customer_segment",
+        "sentiment",
+        "impact",
+        "action",
+    ]
+    node_symbols = {
+        "feedback": "circle",
+        "theme": "diamond",
+        "root_cause": "hexagon",
+        "issue": "square",
+        "customer_segment": "circle",
+        "sentiment": "triangle-up",
+        "impact": "star",
+        "action": "pentagon",
+    }
+    fig = go.Figure()
+
+    if nodes:
+        y_values = [node["y"] for node in nodes.values()]
+        header_y = max(y_values) + 1.0
+        footer_y = min(y_values) - 0.85
+        for index, x_value in enumerate([0, 1.25, 2.45, 3.35, 4.75, 6.1, 7.25]):
+            fig.add_shape(
+                type="rect",
+                x0=x_value - 0.48,
+                x1=x_value + 0.48,
+                y0=footer_y,
+                y1=header_y + 0.28,
+                line=dict(width=0),
+                fillcolor="#f8fafc" if index % 2 == 0 else "#eef6ff",
+                opacity=0.72,
+                layer="below",
+            )
+
+    for relation, (color, label) in edge_styles.items():
+        relation_edges = [edge for edge in edges if edge["relation"] == relation]
+        if not relation_edges:
+            continue
+        x_values = []
+        y_values = []
+        for edge in relation_edges:
+            source = nodes.get(edge["source"])
+            target = nodes.get(edge["target"])
+            if not source or not target:
+                continue
+            x_values.extend([source["x"], target["x"], None])
+            y_values.extend([source["y"], target["y"], None])
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=y_values,
+                mode="lines",
+                line=dict(color=color, width=2.0),
+                hoverinfo="skip",
+                name=label,
+                opacity=0.34,
+                showlegend=False,
+            )
+        )
+
+    for node_type in node_type_order:
+        group = [node for node in nodes.values() if node["type"] == node_type]
+        if not group:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=[node["x"] for node in group],
+                y=[node["y"] for node in group],
+                mode="markers+text",
+                name=node_type_label(node_type),
+                text=[graph_node_marker_label(node) for node in group],
+                textposition="middle center",
+                customdata=[node["id"] for node in group],
+                hovertext=[
+                    (
+                        f"{node_type_label(node['type'])}<br>"
+                        f"Cluster {node['cluster_id']}<br>"
+                        f"{escape(shorten_text(node['label'], 120))}<br>"
+                        f"{escape(shorten_text(node['description'], 140))}"
+                    )
+                    for node in group
+                ],
+                hovertemplate="<b>%{text}</b><br>%{hovertext}<extra></extra>",
+                marker=dict(
+                    size=[node["size"] for node in group],
+                    color=[node["color"] for node in group],
+                    symbol=node_symbols.get(node_type, "circle"),
+                    line=dict(width=1.2, color="#ffffff"),
+                    opacity=0.92,
+                ),
+                textfont=dict(size=9, color="#ffffff"),
+                showlegend=False,
+            )
+        )
+
+    if nodes:
+        for x_value, label in [
+            (0, "Feedback"),
+            (1.25, "Theme"),
+            (2.45, "Root Cause"),
+            (3.35, "Issue"),
+            (4.75, "Segment + Sentiment"),
+            (6.1, "Risk"),
+            (7.25, "Action"),
+        ]:
+            fig.add_annotation(
+                x=x_value,
+                y=header_y,
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                font=dict(size=13, color="#172033"),
+                align="center",
+            )
+        fig.update_yaxes(range=[footer_y, header_y + 0.35])
+
+    fig.update_layout(
+        title="Cause & Effect Flow Map",
+        clickmode="event+select",
+        dragmode="pan",
+        showlegend=False,
+    )
+    dynamic_height = max(620, min(980, 280 + len({node["cluster_id"] for node in nodes.values()}) * 98))
+    apply_plotly_soft_ui(fig, height=dynamic_height, showlegend=False)
+    fig.update_layout(
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(family="Inter, Arial, sans-serif", color="#172033", size=12),
+        title=dict(font=dict(color="#172033", size=17)),
+        margin=dict(l=36, r=42, t=76, b=42),
+        hoverlabel=dict(
+            bgcolor="#ffffff",
+            bordercolor="rgba(23, 32, 51, 0.16)",
+            font=dict(color="#172033"),
+        ),
+    )
+    fig.update_xaxes(range=[-0.45, 8.15], visible=False, showgrid=False, zeroline=False)
+    fig.update_yaxes(visible=False, showgrid=False, zeroline=False)
+    return fig
+
+
+def extract_selected_node_id(plotly_state):
+    try:
+        points = plotly_state.selection.points
+    except AttributeError:
+        points = (
+            plotly_state.get("selection", {}).get("points", [])
+            if isinstance(plotly_state, dict)
+            else []
+        )
+    if not points:
+        return None
+    point = points[0]
+    custom_data = point.get("customdata") if isinstance(point, dict) else None
+    if isinstance(custom_data, (list, tuple)):
+        return custom_data[0] if custom_data else None
+    return custom_data
+
+
+def render_graph_node_detail(selected_node_id, nodes, edges):
+    node = nodes.get(selected_node_id)
+    if not node:
+        st.info("Click a graph node or choose one from the selector to inspect evidence.")
+        return
+
+    connected_edges = [
+        edge
+        for edge in edges
+        if edge["source"] == selected_node_id or edge["target"] == selected_node_id
+    ]
+    relationship_items = "".join(
+        "<li>"
+        f"<strong>{escape(edge['relation'])}</strong><br>"
+        f"{escape(shorten_text(edge['description'], 120))}"
+        "</li>"
+        for edge in connected_edges[:7]
+    )
+    if not relationship_items:
+        relationship_items = "<li>No direct graph relationships found for this node.</li>"
+
+    st.markdown(
+        '<div class="cx-graph-detail">'
+        f'<span class="cx-graph-type">{escape(node_type_label(node["type"]))}</span>'
+        f'<h4 style="margin:0.7rem 0 0.35rem;">{escape(node["label"])}</h4>'
+        f'<p style="margin:0 0 0.75rem;">{escape(node["description"])}</p>'
+        '<div class="cx-action-meta">'
+        f'<div><span>Cluster</span><strong>{node["cluster_id"]}</strong></div>'
+        f'<div><span>Priority</span><strong>{escape(str(node["priority"]))}</strong></div>'
+        f'<div><span>Sentiment</span><strong>{escape(str(node["sentiment"]).title())}</strong></div>'
+        "</div>"
+        f'<div class="cx-quote">"{escape(shorten_text(node["evidence"], 260))}"</div>'
+        '<div style="margin-top:0.8rem;">'
+        '<strong style="color:var(--cx-ink);">Root cause:</strong> '
+        f'<span>{escape(node["root_cause"])}</span>'
+        "</div>"
+        '<div style="margin-top:0.65rem;">'
+        '<strong style="color:var(--cx-ink);">Recommended action:</strong> '
+        f'<span>{escape(node["recommended_action"])}</span>'
+        "</div>"
+        '<h5 style="margin:0.9rem 0 0.2rem; color:var(--cx-ink);">Connected relationships</h5>'
+        f'<ul class="cx-relationship-list">{relationship_items}</ul>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_cause_effect_readout(insights):
+    if not insights:
+        return
+
+    ranked = sorted(insights, key=lambda item: item.priority_score, reverse=True)
+    top = ranked[0]
+    top_action = next((item for item in ranked if item.recommended_action), top)
+    top_root = next((item for item in ranked if item.root_cause), top)
+    cards = [
+        (
+            "Priority path",
+            f"Cluster {top.cluster_id}: {top.issue_theme.title()}",
+            f"{top.priority_label} with {top.metadata.get('negative_rate', 0):.0%} negative feedback.",
+        ),
+        (
+            "Likely driver",
+            top_root.root_cause,
+            "Treat this as evidence-weighted, not absolute causality.",
+        ),
+        (
+            "Best next action",
+            f"Cluster {top_action.cluster_id}",
+            top_action.recommended_action,
+        ),
+    ]
+    html = "".join(
+        '<div class="cx-readout-card">'
+        f'<span class="cx-graph-type">{escape(label)}</span>'
+        f"<h5>{escape(shorten_text(title, 72))}</h5>"
+        f"<p>{escape(shorten_text(body, 150))}</p>"
+        "</div>"
+        for label, title, body in cards
+    )
+    st.markdown(
+        '<div class="cx-readout-grid">'
+        f"{html}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def graph_category_nodes(nodes, category):
+    category_types = {
+        "Issues": {"issue"},
+        "Risks": {"impact"},
+        "Root Causes": {"root_cause"},
+        "Actions": {"action"},
+        "Segments": {"customer_segment"},
+        "Feedback": {"feedback"},
+        "Sentiment": {"sentiment"},
+    }
+    allowed_types = category_types.get(category, {"issue"})
+    category_nodes = [
+        node for node in nodes.values() if node["type"] in allowed_types
+    ]
+    return sorted(
+        category_nodes,
+        key=lambda node: (
+            -float(node.get("priority_score", 0)),
+            node["cluster_id"],
+            node["type"],
+        ),
+    )
+
+
+def graph_category_button_label(node):
+    node_type = node["type"]
+    cluster = f"C{node['cluster_id']}"
+    if node_type == "issue":
+        return f"{cluster} · {node['issue_theme'].title()}"
+    if node_type == "impact":
+        return f"{cluster} · {node['priority']}"
+    if node_type == "root_cause":
+        return f"{cluster} · {shorten_text(node['root_cause'], 34)}"
+    if node_type == "action":
+        return f"{cluster} · {shorten_text(node['recommended_action'], 42)}"
+    if node_type == "customer_segment":
+        return f"{cluster} · Customers affected by {node['issue_theme'].title()}"
+    if node_type == "feedback":
+        return f"{cluster} · {shorten_text(node['evidence'], 42)}"
+    if node_type == "sentiment":
+        return f"{cluster} · {str(node['sentiment']).title()} sentiment"
+    return f"{cluster} · {node['label']}"
+
+
+def render_graph_category_selector(nodes):
+    st.markdown(
+        '<h4 class="cx-section-heading">Selected Node Insight</h4>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Start with a business category, then choose the cluster signal you want to inspect."
+    )
+    category_options = [
+        "Issues",
+        "Risks",
+        "Root Causes",
+        "Actions",
+        "Segments",
+        "Feedback",
+        "Sentiment",
+    ]
+    if st.session_state.get("cause_effect_insight_category") not in category_options:
+        st.session_state.cause_effect_insight_category = "Issues"
+    category = st.segmented_control(
+        "Insight category",
+        options=category_options,
+        default="Issues",
+        key="cause_effect_insight_category",
+    )
+    category_items = graph_category_nodes(nodes, category)
+    if not category_items:
+        return None
+
+    if st.session_state.get("cause_effect_last_category") != category:
+        st.session_state.cause_effect_last_category = category
+        st.session_state.cause_effect_selected_node = category_items[0]["id"]
+
+    selected_node = st.session_state.get(
+        "cause_effect_selected_node",
+        category_items[0]["id"],
+    )
+    if selected_node not in nodes:
+        selected_node = category_items[0]["id"]
+
+    card_cols = st.columns(3)
+    for index, node in enumerate(category_items[:6]):
+        with card_cols[index % 3]:
+            if st.button(
+                graph_category_button_label(node),
+                key=f"cause_effect_pick_{category}_{node['id']}",
+                width="stretch",
+            ):
+                selected_node = node["id"]
+                st.session_state.cause_effect_selected_node = selected_node
+                st.rerun()
+
+    return selected_node
+
+
+def build_relationship_dataframe(nodes, edges):
+    rows = []
+    for edge in edges:
+        source = nodes.get(edge["source"], {})
+        target = nodes.get(edge["target"], {})
+        rows.append(
+            {
+                "Relationship": edge["relation"],
+                "From": source.get("label", edge["source"]),
+                "To": target.get("label", edge["target"]),
+                "Weight": round(float(edge.get("weight", 0)), 3),
+                "Meaning": edge["description"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_cause_effect_outline():
+    steps = [
+        ("1", "Feedback", "Source customer comment."),
+        ("2", "Theme", "Repeated language pattern."),
+        ("3", "Root Cause", "Probable driver behind the issue."),
+        ("4", "Issue", "Operational problem to manage."),
+        ("5", "Segment", "Customer group being affected."),
+        ("6", "Risk / Action", "Priority plus recommended mitigation."),
+    ]
+    cards = "".join(
+        '<div class="cx-graph-step">'
+        f"<span>{number}</span>"
+        f"<strong>{escape(title)}</strong>"
+        f"<p>{escape(description)}</p>"
+        "</div>"
+        for number, title, description in steps
+    )
+    st.markdown(
+        '<div class="cx-graph-outline">'
+        f"{cards}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_cause_effect_key():
+    key_items = [
+        ("#475569", "Feedback"),
+        ("#0891b2", "Theme"),
+        ("#7c3aed", "Root cause"),
+        ("#d97706", "Issue"),
+        ("#dc2626", "Risk"),
+        ("#059669", "Action"),
+    ]
+    chips = "".join(
+        '<span class="cx-graph-key-item">'
+        f'<span class="cx-key-dot" style="background:{color};"></span>'
+        f"{escape(label)}"
+        "</span>"
+        for color, label in key_items
+    )
+    st.markdown(
+        '<div class="cx-graph-key">'
+        f"{chips}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_cause_effect_graph(
+    audit_engine,
+    causal_engine,
+    action_insights,
+    df,
+    cluster_assignments,
+):
+    render_page_header(
+        "Cause & Effect Graph",
+        "Explore how feedback, themes, root causes, issues, customer segments, sentiment, impact, and actions connect across PX-Intel outputs.",
+        "Relationship map",
+    )
+    render_cause_effect_outline()
+
+    date_column = find_date_column(df)
+    sentiment_options = ["All"] + sorted(
+        {str(insight.sentiment_label).title() for insight in action_insights}
+    )
+    priority_options = ["All"] + sorted(
+        {insight.priority_label for insight in action_insights},
+        key=lambda label: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(label.split()[0], 9),
+    )
+    cluster_options = ["All"] + [
+        f"Cluster {insight.cluster_id}"
+        for insight in sorted(action_insights, key=lambda item: item.cluster_id)
+    ]
+    theme_options = ["All"] + sorted(
+        {insight.issue_theme.title() for insight in action_insights}
+    )
+
+    filter_cols = st.columns([0.95, 0.95, 0.95, 1.15, 1.05])
+    with filter_cols[0]:
+        sentiment_filter = st.selectbox(
+            "Sentiment",
+            sentiment_options,
+            key="cause_effect_sentiment_filter",
+        )
+    with filter_cols[1]:
+        priority_filter = st.selectbox(
+            "Priority",
+            priority_options,
+            key="cause_effect_priority_filter",
+        )
+    with filter_cols[2]:
+        cluster_filter = st.selectbox(
+            "Cluster",
+            cluster_options,
+            key="cause_effect_cluster_filter",
+        )
+    with filter_cols[3]:
+        theme_filter = st.selectbox(
+            "Theme",
+            theme_options,
+            key="cause_effect_theme_filter",
+        )
+    with filter_cols[4]:
+        time_filter = st.selectbox(
+            "Time period",
+            ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days", "Custom Range"],
+            key="cause_effect_time_filter",
+        )
+
+    custom_range = None
+    if date_column and time_filter == "Custom Range":
+        parsed_dates = pd.to_datetime(df[date_column], errors="coerce").dropna()
+        if not parsed_dates.empty:
+            custom_range = st.date_input(
+                "Custom graph date range",
+                value=(parsed_dates.min().date(), parsed_dates.max().date()),
+                key="cause_effect_custom_range",
+            )
+
+    filtered_insights = filter_cause_effect_insights(
+        action_insights,
+        sentiment_filter,
+        priority_filter,
+        cluster_filter,
+        theme_filter,
+    )
+    filtered_insights, time_note = filter_insights_by_time_period(
+        filtered_insights,
+        df,
+        cluster_assignments,
+        date_column,
+        time_filter,
+        custom_range,
+    )
+    if time_note:
+        st.caption(time_note)
+
+    density_col, density_note_col = st.columns([1, 2])
+    with density_col:
+        graph_density = st.segmented_control(
+            "Graph density",
+            options=["Top 3", "Top 5", "All Matching"],
+            default="Top 5",
+            key="cause_effect_graph_density",
+        )
+    filtered_insights = apply_graph_density(
+        filtered_insights,
+        graph_density,
+        cluster_filter,
+    )
+    with density_note_col:
+        st.caption(
+            "The graph defaults to the top priority clusters so the flow stays readable. Use All Matching when you need the complete relationship map."
+        )
+
+    render_cause_effect_readout(filtered_insights)
+
+    nodes, edges = build_cause_effect_graph(filtered_insights, causal_engine)
+
+    metric_cols = st.columns(4)
+    with metric_cols[0]:
+        render_kpi_card("Graph Nodes", len(nodes), "Feedback to actions", "#3b82f6")
+    with metric_cols[1]:
+        render_kpi_card("Relationships", len(edges), "Weighted evidence links", "#06b6d4")
+    with metric_cols[2]:
+        render_kpi_card("Clusters Shown", len(filtered_insights), "After filters", "#8b5cf6")
+    with metric_cols[3]:
+        render_kpi_card(
+            "Causal Links",
+            sum(
+                len(getattr(causal_engine, "cascade_predictions", {}).get(insight.cluster_id, []))
+                for insight in filtered_insights
+            ),
+            "M3 cascade candidates",
+            "#10b981",
+        )
+
+    if not nodes:
+        st.info("No cause-and-effect graph matches the current filters.")
+        return
+
+    st.caption("Click a node in the graph to inspect evidence and recommended actions below.")
+    render_cause_effect_key()
+    graph_state = st.plotly_chart(
+        create_cause_effect_figure(nodes, edges),
+        width="stretch",
+        key="cause_effect_graph_plot",
+        on_select="rerun",
+        selection_mode="points",
+        config={"displayModeBar": True},
+    )
+    selected_from_chart = extract_selected_node_id(graph_state)
+    if selected_from_chart:
+        st.session_state.cause_effect_selected_node = selected_from_chart
+
+    selected_node = render_graph_category_selector(nodes)
+    if selected_node:
+        render_graph_node_detail(selected_node, nodes, edges)
+
+    relationship_df = build_relationship_dataframe(nodes, edges)
+    render_table_section(
+        "Relationship Evidence Table",
+        "Structured node and edge evidence for the relationships currently visible in the graph.",
+        relationship_df,
+        "No relationship evidence is available for the current graph filters.",
+        accent_label="Graph evidence",
+    )
+
+
+def impact_type_for_insight(insight, cascade_count):
+    negative_rate = insight.metadata.get("negative_rate", 0)
+    if insight.priority_label.startswith("HIGH") or cascade_count >= 3:
+        return "Systemic Risk"
+    if negative_rate >= 0.4:
+        return "Service Recovery"
+    if str(insight.sentiment_label).upper() == "POSITIVE":
+        return "Protect Strength"
+    return "Monitor"
+
+
+def action_window_for_impact(row):
+    if row["impact_type"] == "Systemic Risk" or row["impact_score"] >= 0.62:
+        return "Immediate"
+    if row["impact_type"] == "Service Recovery" or row["negative_rate"] >= 0.3:
+        return "Next 7 Days"
+    return "Monitor"
+
+
+def is_quick_win(row):
+    return (
+        row["impact_type"] in {"Service Recovery", "Monitor"}
+        and row["cascade_count"] <= 1
+        and row["impact_score"] >= 0.28
+    )
+
+
+def build_operational_impact_rows(action_insights, causal_engine):
+    rows = []
+    insight_by_cluster = {insight.cluster_id: insight for insight in action_insights}
+    for insight in action_insights:
+        cascades = getattr(causal_engine, "cascade_predictions", {}).get(
+            insight.cluster_id, []
+        )
+        cascade_targets = [
+            int(cascade.get("target_cluster"))
+            for cascade in cascades
+            if cascade.get("target_cluster") in insight_by_cluster
+        ]
+        top_cascade = max(
+            [cascade.get("cascade_likelihood", 0) for cascade in cascades],
+            default=0,
+        )
+        negative_rate = insight.metadata.get("negative_rate", 0)
+        cluster_size = insight.metadata.get("cluster_size", 0)
+        impact_score = (
+            insight.priority_score * 0.62
+            + negative_rate * 0.22
+            + min(len(cascade_targets), 4) * 0.04
+        )
+        row = {
+            "cluster_id": insight.cluster_id,
+            "theme": insight.issue_theme.title(),
+            "priority": insight.priority_label,
+            "priority_score": insight.priority_score,
+            "impact_score": impact_score,
+            "impact_type": impact_type_for_insight(insight, len(cascade_targets)),
+            "negative_rate": negative_rate,
+            "cluster_size": cluster_size,
+            "cascade_count": len(cascade_targets),
+            "top_cascade": top_cascade,
+            "cascade_targets": cascade_targets,
+            "root_cause": insight.root_cause,
+            "recommended_action": insight.recommended_action,
+            "example_feedback": insight.example_feedback,
+            "key_insight": insight.key_insight,
+        }
+        row["action_window"] = action_window_for_impact(row)
+        row["is_quick_win"] = is_quick_win(row)
+        rows.append(row)
+    return sorted(rows, key=lambda row: row["impact_score"], reverse=True)
+
+
+def filter_operational_impact_rows(rows, focus_filter, priority_filter, cluster_filter, theme_filter):
+    filtered = list(rows)
+    if focus_filter == "Systemic Risks":
+        filtered = [row for row in filtered if row["impact_type"] == "Systemic Risk"]
+    elif focus_filter == "Service Recovery":
+        filtered = [row for row in filtered if row["impact_type"] == "Service Recovery"]
+    elif focus_filter == "Quick Wins":
+        filtered = [row for row in filtered if row["is_quick_win"]]
+    elif focus_filter == "Protect Strengths":
+        filtered = [row for row in filtered if row["impact_type"] == "Protect Strength"]
+    elif focus_filter == "Monitor":
+        filtered = [row for row in filtered if row["impact_type"] == "Monitor"]
+    if priority_filter != "All":
+        filtered = [row for row in filtered if row["priority"] == priority_filter]
+    if cluster_filter != "All":
+        filtered = [
+            row for row in filtered if f"Cluster {row['cluster_id']}" == cluster_filter
+        ]
+    if theme_filter != "All":
+        filtered = [row for row in filtered if row["theme"] == theme_filter]
+    return filtered
+
+
+def operational_impact_dataframe(rows):
+    return pd.DataFrame(
+        [
+            {
+                "Cluster": row["cluster_id"],
+                "Theme": row["theme"],
+                "Impact Type": row["impact_type"],
+                "Priority": row["priority"],
+                "Impact Score": round(row["impact_score"], 3),
+                "Action Window": row["action_window"],
+                "Quick Win": "Yes" if row["is_quick_win"] else "No",
+                "Negative Rate": f"{row['negative_rate']:.0%}",
+                "Feedback Volume": row["cluster_size"],
+                "Cascade Targets": ", ".join(
+                    [f"C{target}" for target in row["cascade_targets"]]
+                )
+                or "None",
+                "Root Cause": row["root_cause"],
+                "Recommended Action": row["recommended_action"],
+            }
+            for row in rows
+        ]
+    )
+
+
+def render_operational_impact_card(row, index):
+    badge_class = (
+        "high"
+        if row["impact_type"] == "Systemic Risk"
+        else "medium"
+        if row["impact_type"] == "Service Recovery"
+        else "low"
+    )
+    cascade_text = (
+        " → ".join([f"C{target}" for target in row["cascade_targets"][:4]])
+        if row["cascade_targets"]
+        else "No strong cascade target"
+    )
+    st.markdown(
+        '<div class="cx-impact-card">'
+        '<div class="cx-card-topline">'
+        f'<span class="cx-icon-block">OP{index}</span>'
+        f'<span class="cx-chip {badge_class}">{escape(row["impact_type"])}</span>'
+        "</div>"
+        f'<p class="cx-eyebrow" style="margin-bottom:0.35rem;">Cluster {row["cluster_id"]} · {escape(row["priority"])}</p>'
+        f"<h4>{escape(row['theme'])}</h4>"
+        f"<p>{escape(row['key_insight'])}</p>"
+        '<div class="cx-action-meta">'
+        f'<div><span>Impact</span><strong>{row["impact_score"]:.3f}</strong></div>'
+        f'<div><span>Negative</span><strong>{row["negative_rate"]:.0%}</strong></div>'
+        f'<div><span>Cascades</span><strong>{row["cascade_count"]}</strong></div>'
+        "</div>"
+        f'<div class="cx-impact-path"><strong style="color:var(--cx-ink);">Cascade path:</strong> {escape(cascade_text)}</div>'
+        '<div style="margin-top:0.75rem;">'
+        '<strong style="color:var(--cx-ink);">Action:</strong> '
+        f'<span>{escape(row["recommended_action"])}</span>'
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_operational_command_cards(rows):
+    if not rows:
+        return
+
+    risk = next(
+        (row for row in rows if row["impact_type"] == "Systemic Risk"),
+        rows[0],
+    )
+    recovery = max(
+        rows,
+        key=lambda row: (
+            row["negative_rate"],
+            row["impact_score"],
+        ),
+    )
+    connected = max(
+        rows,
+        key=lambda row: (
+            row["cascade_count"],
+            row["top_cascade"],
+            row["impact_score"],
+        ),
+    )
+    quick_win = next((row for row in rows if row["is_quick_win"]), None)
+
+    cards = [
+        (
+            "Highest Risk",
+            f"C{risk['cluster_id']}: {risk['theme']}",
+            f"{risk['priority']} · {risk['negative_rate']:.0%} negative · impact {risk['impact_score']:.2f}",
+            "#dc2626",
+        ),
+        (
+            "Recovery Opportunity",
+            f"C{recovery['cluster_id']}: {recovery['theme']}",
+            f"Focus service recovery where negative feedback is most concentrated.",
+            "#d97706",
+        ),
+        (
+            "Most Connected",
+            f"C{connected['cluster_id']}: {connected['theme']}",
+            f"{connected['cascade_count']} connected cluster target(s).",
+            "#2563eb",
+        ),
+        (
+            "Best Quick Win",
+            (
+                f"C{quick_win['cluster_id']}: {quick_win['theme']}"
+                if quick_win
+                else "No clear quick win"
+            ),
+            (
+                quick_win["recommended_action"]
+                if quick_win
+                else "Current filters do not expose a low-complexity, action-ready issue."
+            ),
+            "#059669",
+        ),
+    ]
+    html = "".join(
+        '<div class="cx-command-card">'
+        f'<span class="cx-graph-type" style="color:{accent}; background:rgba(59,130,246,0.08);">{escape(label)}</span>'
+        f"<h4>{escape(shorten_text(title, 58))}</h4>"
+        f"<p>{escape(shorten_text(body, 136))}</p>"
+        "</div>"
+        for label, title, body, accent in cards
+    )
+    st.markdown(
+        '<div class="cx-command-grid">'
+        f"{html}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_operational_priority_queue(rows):
+    st.markdown(
+        '<h4 class="cx-section-heading">Operational Priority Queue</h4>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Ranked by impact score, customer pain, and cascade reach. Start at the top unless leadership has a different constraint."
+    )
+    if not rows:
+        st.info("No priority queue rows match the current filters.")
+        return
+
+    for index, row in enumerate(rows[:7], 1):
+        cascade_text = (
+            ", ".join([f"C{target}" for target in row["cascade_targets"][:4]])
+            if row["cascade_targets"]
+            else "No strong connected cluster"
+        )
+        st.markdown(
+            '<div class="cx-priority-row">'
+            f'<div><span class="cx-rank-pill">{index}</span></div>'
+            "<div>"
+            f"<h4>C{row['cluster_id']}: {escape(row['theme'])}</h4>"
+            f'<span class="cx-chip {priority_class(row["priority"])}">{escape(row["priority"])}</span>'
+            f'<p style="margin-top:0.45rem;">{escape(row["impact_type"])} · {row["action_window"]}</p>'
+            "</div>"
+            "<div>"
+            f"<p><strong style='color:var(--cx-ink);'>Why it matters:</strong> {escape(shorten_text(row['key_insight'], 160))}</p>"
+            f"<p style='margin-top:0.45rem;'><strong style='color:var(--cx-ink);'>Ripple:</strong> {escape(cascade_text)}</p>"
+            "</div>"
+            "<div>"
+            f"<p><strong style='color:var(--cx-ink);'>Action:</strong> {escape(shorten_text(row['recommended_action'], 170))}</p>"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def apply_operational_chart_theme(fig, height=360, showlegend=False):
+    apply_plotly_soft_ui(fig, height=height, showlegend=showlegend)
+    fig.update_layout(
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(family="Inter, Arial, sans-serif", color="#172033", size=11),
+        title=dict(font=dict(color="#172033", size=16)),
+        hoverlabel=dict(bgcolor="#ffffff", font=dict(color="#172033")),
+    )
+    return fig
+
+
+def render_operational_impact_charts(rows):
+    if not rows:
+        st.info("No operational impact graphics match the current filters.")
+        return
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Impact Matrix</h4>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Quadrants translate model output into operational posture: fix first, recover service, monitor closely, or keep low priority."
+    )
+    scatter_fig = go.Figure()
+    cascade_threshold = max(1, int(np.median([row["cascade_count"] for row in rows])))
+    scatter_fig.add_trace(
+        go.Scatter(
+            x=[row["negative_rate"] for row in rows],
+            y=[row["cascade_count"] for row in rows],
+            mode="markers+text",
+            text=[f"C{row['cluster_id']}" for row in rows],
+            textposition="top center",
+            marker=dict(
+                size=[18 + row["impact_score"] * 28 for row in rows],
+                color=[row["impact_score"] for row in rows],
+                colorscale="Reds",
+                showscale=True,
+                colorbar=dict(title="Impact"),
+                line=dict(color="#ffffff", width=1.2),
+            ),
+            hovertext=[
+                f"{row['theme']}<br>{row['priority']}<br>{row['recommended_action']}"
+                for row in rows
+            ],
+            hovertemplate=(
+                "<b>%{text}</b><br>Negative rate: %{x:.0%}<br>"
+                "Cascade count: %{y}<br>%{hovertext}<extra></extra>"
+            ),
+        )
+    )
+    scatter_fig.add_vrect(
+        x0=0.4,
+        x1=1,
+        y0=cascade_threshold,
+        y1=max([row["cascade_count"] for row in rows] + [cascade_threshold]) + 1,
+        fillcolor="#fee2e2",
+        opacity=0.45,
+        line_width=0,
+        annotation_text="Fix first",
+        annotation_position="top left",
+    )
+    scatter_fig.add_vrect(
+        x0=0.4,
+        x1=1,
+        y0=-0.25,
+        y1=cascade_threshold,
+        fillcolor="#ffedd5",
+        opacity=0.4,
+        line_width=0,
+        annotation_text="Service recovery",
+        annotation_position="bottom left",
+    )
+    scatter_fig.add_vrect(
+        x0=0,
+        x1=0.4,
+        y0=cascade_threshold,
+        y1=max([row["cascade_count"] for row in rows] + [cascade_threshold]) + 1,
+        fillcolor="#dbeafe",
+        opacity=0.38,
+        line_width=0,
+        annotation_text="Monitor closely",
+        annotation_position="top right",
+    )
+    scatter_fig.add_vrect(
+        x0=0,
+        x1=0.4,
+        y0=-0.25,
+        y1=cascade_threshold,
+        fillcolor="#dcfce7",
+        opacity=0.34,
+        line_width=0,
+        annotation_text="Lower priority",
+        annotation_position="bottom right",
+    )
+    scatter_fig.add_vline(x=0.4, line=dict(color="#172033", dash="dash", width=1))
+    scatter_fig.add_hline(
+        y=cascade_threshold,
+        line=dict(color="#172033", dash="dash", width=1),
+    )
+    scatter_fig.update_layout(
+        title="Impact Matrix: Customer Pain vs Ripple Reach",
+        xaxis_title="Negative feedback rate",
+        yaxis_title="Cascade targets",
+        xaxis_tickformat=".0%",
+    )
+    apply_operational_chart_theme(scatter_fig, height=500)
+    st.plotly_chart(scatter_fig, width="stretch")
+
+    top_rows = rows[:8]
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=[row["impact_score"] for row in top_rows],
+                y=[f"C{row['cluster_id']}: {row['theme']}" for row in top_rows],
+                orientation="h",
+                marker=dict(
+                    color=[
+                        "#dc2626"
+                        if row["impact_type"] == "Systemic Risk"
+                        else "#d97706"
+                        if row["impact_type"] == "Service Recovery"
+                        else "#059669"
+                        if row["impact_type"] == "Protect Strength"
+                        else "#64748b"
+                        for row in top_rows
+                    ]
+                ),
+                text=[f"{row['impact_score']:.2f}" for row in top_rows],
+                textposition="auto",
+                hovertemplate="<b>%{y}</b><br>Impact score: %{x:.3f}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title="Impact Score Ranking",
+        xaxis_title="Impact score",
+        yaxis=dict(autorange="reversed"),
+    )
+    apply_operational_chart_theme(fig, height=360)
+    st.plotly_chart(fig, width="stretch")
+
+
+def render_ripple_summary(rows):
+    st.markdown(
+        '<h4 class="cx-section-heading">Ripple Summary</h4>',
+        unsafe_allow_html=True,
+    )
+    if not rows:
+        st.info("No ripple summaries match the current filters.")
+        return
+
+    connected_rows = [row for row in rows if row["cascade_targets"]]
+    if not connected_rows:
+        st.info("No strong ripple paths are visible for the current filters.")
+        return
+
+    for row in connected_rows[:4]:
+        target_text = ", ".join([f"Cluster {target}" for target in row["cascade_targets"][:4]])
+        st.markdown(
+            '<div class="cx-impact-path">'
+            f'<strong style="color:var(--cx-ink);">Cluster {row["cluster_id"]}: {escape(row["theme"])}</strong><br>'
+            f"Fixing this issue may also affect {escape(target_text)}. "
+            f"Recommended move: {escape(shorten_text(row['recommended_action'], 170))}"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def render_operational_action_plan(rows):
+    st.markdown(
+        '<h4 class="cx-section-heading">Action Plan</h4>',
+        unsafe_allow_html=True,
+    )
+    groups = [
+        ("Immediate", "Fix first", "#dc2626"),
+        ("Next 7 Days", "Plan next", "#d97706"),
+        ("Monitor", "Watch signals", "#64748b"),
+    ]
+    cols = st.columns(3)
+    for col, (window, subtitle, accent) in zip(cols, groups):
+        items = [row for row in rows if row["action_window"] == window][:4]
+        with col:
+            item_html = ""
+            if items:
+                for row in items:
+                    item_html += (
+                        '<div class="cx-action-group-item">'
+                        f'<strong>C{row["cluster_id"]}: {escape(row["theme"])}</strong>'
+                        f'<p>{escape(shorten_text(row["recommended_action"], 150))}</p>'
+                        "</div>"
+                    )
+            else:
+                item_html = '<div class="cx-action-group-item"><p>No matching actions.</p></div>'
+            st.markdown(
+                '<div class="cx-action-group">'
+                f'<span class="cx-graph-type" style="color:{accent};">{escape(subtitle)}</span>'
+                f"<h4>{escape(window)}</h4>"
+                f"{item_html}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+
+def render_operational_impact(
+    causal_engine,
+    action_insights,
+):
+    render_page_header(
+        "Operational Impact",
+        "A manager-facing view of which experience issues are most likely to affect operations, cascade into other clusters, and require action.",
+        "Operations",
+    )
+
+    impact_rows = build_operational_impact_rows(action_insights, causal_engine)
+    priority_options = ["All"] + sorted(
+        {row["priority"] for row in impact_rows},
+        key=lambda label: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(label.split()[0], 9),
+    )
+    cluster_options = ["All"] + [
+        f"Cluster {row['cluster_id']}"
+        for row in sorted(impact_rows, key=lambda item: item["cluster_id"])
+    ]
+    theme_options = ["All"] + sorted({row["theme"] for row in impact_rows})
+
+    focus_col, download_col = st.columns([3, 0.85])
+    with focus_col:
+        focus_filter = st.segmented_control(
+            "Operational focus",
+            options=[
+                "All",
+                "Systemic Risks",
+                "Service Recovery",
+                "Quick Wins",
+                "Protect Strengths",
+                "Monitor",
+            ],
+            default="All",
+            key="operational_impact_focus_filter",
+        )
+
+    with st.expander("Advanced filters"):
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
+        with filter_col1:
+            priority_filter = st.selectbox(
+                "Priority",
+                priority_options,
+                key="operational_impact_priority_filter",
+            )
+        with filter_col2:
+            cluster_filter = st.selectbox(
+                "Cluster",
+                cluster_options,
+                key="operational_impact_cluster_filter",
+            )
+        with filter_col3:
+            theme_filter = st.selectbox(
+                "Theme",
+                theme_options,
+                key="operational_impact_theme_filter",
+            )
+
+    visible_rows = filter_operational_impact_rows(
+        impact_rows,
+        focus_filter,
+        priority_filter,
+        cluster_filter,
+        theme_filter,
+    )
+    export_df = operational_impact_dataframe(visible_rows)
+    with download_col:
+        st.download_button(
+            "Download CSV",
+            data=export_df.to_csv(index=False),
+            file_name="px_intel_operational_impact.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+
+    top_row = visible_rows[0] if visible_rows else None
+    systemic_count = sum(1 for row in visible_rows if row["impact_type"] == "Systemic Risk")
+    total_cascades = sum(row["cascade_count"] for row in visible_rows)
+    avg_negative = (
+        np.mean([row["negative_rate"] for row in visible_rows]) if visible_rows else 0
+    )
+
+    metric_cols = st.columns(4)
+    with metric_cols[0]:
+        render_kpi_card("Impact Clusters", len(visible_rows), "After filters", "#3b82f6")
+    with metric_cols[1]:
+        render_kpi_card("Systemic Risks", systemic_count, "Highest operational concern", "#dc2626")
+    with metric_cols[2]:
+        render_kpi_card("Cascade Targets", total_cascades, "Shared impact links", "#06b6d4")
+    with metric_cols[3]:
+        render_kpi_card("Avg Negative Rate", f"{avg_negative:.0%}", "Visible clusters", "#d97706")
+
+    render_operational_command_cards(visible_rows)
+
+    if top_row:
+        st.markdown(
+            '<div class="cx-decision-card featured">'
+            '<div class="cx-card-topline">'
+            '<span class="cx-icon-block">OP</span>'
+            f'<span class="cx-chip {priority_class(top_row["priority"])}">{escape(top_row["priority"])}</span>'
+            "</div>"
+            '<p class="cx-eyebrow" style="margin-bottom:0.35rem;">Highest operational impact</p>'
+            f'<h3 style="margin:0 0 0.5rem;">Cluster {top_row["cluster_id"]}: {escape(top_row["theme"])}</h3>'
+            f'<p style="margin:0 0 0.7rem;">{escape(top_row["key_insight"])}</p>'
+            '<div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem;">'
+            '<strong style="color:var(--cx-ink);">Action:</strong> '
+            f'<span>{escape(top_row["recommended_action"])}</span>'
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    render_operational_priority_queue(visible_rows)
+    render_operational_impact_charts(visible_rows)
+    render_ripple_summary(visible_rows)
+    render_operational_action_plan(visible_rows)
+
+    render_table_section(
+        "Operational Evidence Table",
+        "Filtered operational evidence with impact type, action window, cascade targets, and recommended response.",
+        export_df,
+        "No operational impact table rows are available for the current filters.",
+        accent_label="Operational evidence",
+    )
+
+    with st.expander("M3 causal model details"):
+        st.markdown(causal_engine.get_summary())
+        cluster_options = sorted(causal_engine.cluster_lda_features.keys())
+        if cluster_options:
+            selected_cluster = st.selectbox(
+                "Review cluster causal details",
+                cluster_options,
+                format_func=lambda cluster_id: f"Cluster {cluster_id}",
+                key="operational_impact_causal_detail_cluster",
+            )
+            st.markdown(causal_engine.get_cluster_summary(selected_cluster))
+        causal_df = causal_engine.export_to_dataframe()
+        render_table_header(
+            "Causal Model Export",
+            "Detailed M3 causal output for the selected operational context.",
+            causal_df,
+            accent_label="Model table",
+        )
+        st.dataframe(causal_df, width="stretch", hide_index=True, height=340)
+
+
+def apply_plotly_soft_ui(fig, height=520, showlegend=True):
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, Arial, sans-serif", color="#172033", size=11),
+        height=height,
+        margin=dict(l=48, r=24, t=52, b=52),
+        showlegend=showlegend,
+        hoverlabel=dict(bgcolor="#ffffff", bordercolor="rgba(94,114,228,0.18)", font=dict(color="#172033")),
+    )
+    fig.update_xaxes(gridcolor="rgba(23,32,51,0.08)", zerolinecolor="rgba(23,32,51,0.08)")
+    fig.update_yaxes(gridcolor="rgba(23,32,51,0.08)", zerolinecolor="rgba(23,32,51,0.08)")
+    return fig
+
+
+def render_overview_coverage_cards(
+    audit_engine,
+    causal_engine,
+    action_insights,
+    clustering_engine,
+    texts,
+):
+    """Render compact cross-app status cards for the Overview."""
+    at_risk_count = sum(
+        1 for insight in action_insights if customer_lens_for_insight(insight) == "At Risk"
+    )
+    opportunity_count = sum(
+        1
+        for insight in action_insights
+        if customer_lens_for_insight(insight) == "Opportunity"
+    )
+    _, graph_edges = build_cause_effect_graph(action_insights, causal_engine)
+    relationship_count = len(graph_edges)
+    red_count = len(audit_engine.get_red_zones())
+    export_rows = len(clustering_engine.export_to_dataframe(texts))
+
+    cards = [
+        (
+            "CI",
+            "Customer Signals",
+            f"{at_risk_count} at risk",
+            f"{opportunity_count} opportunity clusters",
+            "#3b82f6",
+        ),
+        (
+            "CE",
+            "Cause Links",
+            f"{relationship_count} relationships",
+            "Mapped from themes, issues, causes, and actions",
+            "#06b6d4",
+        ),
+        (
+            "CA",
+            "Cluster Health",
+            f"{red_count} distress zones",
+            f"{len(audit_engine.cluster_texts)} audited clusters",
+            "#f59e0b",
+        ),
+        (
+            "RP",
+            "Report Data",
+            f"{export_rows:,} rows",
+            "Ready for CSV export",
+            "#10b981",
+        ),
+    ]
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Intelligence Coverage</h4>',
+        unsafe_allow_html=True,
+    )
+    cards_html = ""
+    for icon, title, metric, detail, accent in cards:
+        cards_html += (
+            '<div class="cx-command-card">'
+            '<div class="cx-card-topline">'
+            f'<span class="cx-icon-block">{escape(icon)}</span>'
+            f'<span class="cx-graph-type" style="color:{accent};">{escape(metric)}</span>'
+            "</div>"
+            f"<h4>{escape(title)}</h4>"
+            f"<p>{escape(detail)}</p>"
+            "</div>"
+        )
+    st.markdown(f'<div class="cx-command-grid">{cards_html}</div>', unsafe_allow_html=True)
+
+
+def render_agent_decision_support(
+    action_agent,
+    action_insights,
+    top_agent_insight,
+    high_priority_count,
+    medium_priority_count,
+):
+    st.markdown(
+        '<h3 class="cx-section-heading">AI Agent Decision Support</h3>',
+        unsafe_allow_html=True,
+    )
+
+    decision_col, outline_col = st.columns([1.35, 1])
+    with decision_col:
+        render_decision_summary_card(
+            top_agent_insight,
+            len(action_insights),
+            high_priority_count,
+            medium_priority_count,
+        )
+
+    with outline_col:
+        st.markdown(
+            f"""
+            <div class="cx-decision-card">
+                <div class="cx-card-topline">
+                    <span class="cx-icon-block">DS</span>
+                    <span class="cx-chip">Decision view</span>
+                </div>
+                <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Action intelligence</p>
+                <h4 style="margin:0 0 0.5rem;">Manager-ready signal summary</h4>
+                <p style="margin:0 0 0.5rem;">The strongest issues are scored, explained, and paired with the next operational move.</p>
+                <div class="cx-action-meta">
+                    <div><span>Insights</span><strong>{len(action_insights)}</strong></div>
+                    <div><span>High</span><strong>{high_priority_count}</strong></div>
+                    <div><span>Medium</span><strong>{medium_priority_count}</strong></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_agent_chat(action_agent, action_insights):
+    if "cx_agent_messages" not in st.session_state:
+        st.session_state.cx_agent_messages = [
+            {
+                "role": "assistant",
+                "content": action_agent.answer_question(
+                    "summarize for leadership", action_insights
+                ),
+            }
+        ]
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Ask PX-Intel Agent</h4>',
+        unsafe_allow_html=True,
+    )
+
+    prompt_cols = st.columns(4)
+    suggested_prompts = [
+        "What needs attention first?",
+        "Show the evidence.",
+        "Draft manager actions.",
+        "Which clusters should we monitor?",
+    ]
+    for col, prompt in zip(prompt_cols, suggested_prompts):
+        with col:
+            if st.button(prompt, key=f"overview_agent_prompt_{prompt}"):
+                st.session_state.cx_agent_messages.append(
+                    {"role": "user", "content": prompt}
+                )
+                st.session_state.cx_agent_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": action_agent.answer_question(prompt, action_insights),
+                    }
+                )
+
+    for message in st.session_state.cx_agent_messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    user_question = st.chat_input(
+        "Ask about priorities, cascades, actions, or a specific cluster..."
+    )
+    if user_question:
+        st.session_state.cx_agent_messages.append(
+            {"role": "user", "content": user_question}
+        )
+        answer = action_agent.answer_question(user_question, action_insights)
+        st.session_state.cx_agent_messages.append(
+            {"role": "assistant", "content": answer}
+        )
+        st.rerun()
+
+
+def render_customer_action_dashboard(action_agent, action_insights):
+    st.markdown(
+        '<h3 class="cx-section-heading">Customer Experience Action Dashboard</h3>',
+        unsafe_allow_html=True,
+    )
+
+    filter_col, download_col = st.columns([2.3, 1])
+    with filter_col:
+        priority_filter = st.segmented_control(
+            "Priority filter",
+            options=["All", "HIGH 🔥", "MEDIUM ⚠", "LOW ✅"],
+            default="All",
+            key="overview_action_priority_segment",
+        )
+    filtered_insights = (
+        action_insights
+        if priority_filter == "All"
+        else [
+            insight
+            for insight in action_insights
+            if insight.priority_label == priority_filter
+        ]
+    )
+
+    if st.session_state.get("overview_action_priority_filter") != priority_filter:
+        st.session_state.overview_action_priority_filter = priority_filter
+        st.session_state.overview_action_dashboard_page = 0
+
+    action_df = action_agent.build_dashboard_dataframe(filtered_insights)
+    with download_col:
+        st.download_button(
+            label="Download CSV",
+            data=action_df.to_csv(index=False),
+            file_name="cx_intel_action_dashboard.csv",
+            mime="text/csv",
+            help="Download the currently selected action data.",
+            width="stretch",
+        )
+
+    page_size = 4
+    total_pages = max(1, int(np.ceil(len(filtered_insights) / page_size)))
+    current_page = min(
+        st.session_state.get("overview_action_dashboard_page", 0),
+        total_pages - 1,
+    )
+    st.session_state.overview_action_dashboard_page = current_page
+    page_start = current_page * page_size
+    page_end = page_start + page_size
+    visible_insights = filtered_insights[page_start:page_end]
+
+    if not filtered_insights:
+        st.info("No action insights match this priority filter.")
+        return
+
+    nav_left, nav_mid, nav_right = st.columns([1, 2, 1])
+    with nav_left:
+        if st.button(
+            "Previous",
+            key="overview_action_dashboard_previous",
+            disabled=current_page == 0,
+            width="stretch",
+        ):
+            st.session_state.overview_action_dashboard_page = max(current_page - 1, 0)
+            st.rerun()
+    with nav_mid:
+        st.markdown(
+            f"""
+            <div class="cx-panel-soft" style="padding:0.65rem; border-radius:0.85rem; text-align:center;">
+                Showing actions {page_start + 1}-{min(page_end, len(filtered_insights))} of {len(filtered_insights)}
+                &nbsp;|&nbsp; Page {current_page + 1} of {total_pages}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with nav_right:
+        if st.button(
+            "Next",
+            key="overview_action_dashboard_next",
+            disabled=current_page >= total_pages - 1,
+            width="stretch",
+        ):
+            st.session_state.overview_action_dashboard_page = min(
+                current_page + 1,
+                total_pages - 1,
+            )
+            st.rerun()
+
+    for start in range(0, len(visible_insights), 2):
+        card_cols = st.columns(2)
+        for offset, card_col in enumerate(card_cols):
+            insight_index = start + offset
+            if insight_index >= len(visible_insights):
+                continue
+            with card_col:
+                render_action_outline_card(
+                    visible_insights[insight_index],
+                    page_start + insight_index + 1,
+                )
+
+
+def render_overview(
+    audit_engine,
+    causal_engine,
+    clustering_engine,
+    texts,
+    action_agent,
+    action_insights,
+    top_agent_insight,
+    high_priority_count,
+    medium_priority_count,
+):
+    render_page_header(
+        "PX-Intel Overview",
+        "A focused command view for KPIs, action priorities, customer experience actions, and the PX-Intel agent.",
+        "Overview",
+    )
+
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    with kpi_col1:
+        render_kpi_card(
+            "Feedback Entries",
+            f"{len(texts):,}",
+            "Loaded from PX-Intel data",
+            "#3b82f6",
+        )
+    with kpi_col2:
+        render_kpi_card(
+            "Experience Clusters",
+            clustering_engine.optimal_n_clusters,
+            "Auto-selected by M1",
+            "#06b6d4",
+        )
+    with kpi_col3:
+        render_kpi_card(
+            "High Priority",
+            high_priority_count,
+            "M5 action score",
+            "#ef4444",
+        )
+    with kpi_col4:
+        render_kpi_card(
+            "Medium Priority",
+            medium_priority_count,
+            "Watchlist clusters",
+            "#d97706",
+        )
+
+    render_agent_decision_support(
+        action_agent,
+        action_insights,
+        top_agent_insight,
+        high_priority_count,
+        medium_priority_count,
+    )
+    render_overview_coverage_cards(
+        audit_engine,
+        causal_engine,
+        action_insights,
+        clustering_engine,
+        texts,
+    )
+    render_customer_action_dashboard(action_agent, action_insights)
+    render_agent_chat(action_agent, action_insights)
+
+
+def build_experience_map_figure(
+    landscape_lens,
+    clustering_engine,
+    audit_engine,
+    action_insights,
+    cluster_assignments,
+    texts,
+):
+    insight_by_cluster = {item.cluster_id: item for item in action_insights}
+    fig = go.Figure()
+
+    priority_color_map = {
+        "HIGH 🔥": "#dc2626",
+        "MEDIUM ⚠": "#d97706",
+        "LOW ✅": "#059669",
+    }
+    zone_color_map = {
+        "RED_ZONE": "#ef4444",
+        "GREEN_ZONE": "#10b981",
+        "NEUTRAL_ZONE": "#f59e0b",
+    }
+    cluster_palette = px.colors.qualitative.Safe
+
+    for cluster_id in np.unique(cluster_assignments):
+        mask = cluster_assignments == cluster_id
+        sentiment_dist = audit_engine.cluster_sentiment_results[cluster_id][
+            "sentiment_distribution"
+        ]
+        zone = audit_engine.cluster_zones[cluster_id]["zone_type"]
+        insight = insight_by_cluster.get(int(cluster_id))
+
+        if landscape_lens == "Priority Heatmap" and insight is not None:
+            color = priority_color_map.get(insight.priority_label, "#64748b")
+            trace_name = (
+                f"{insight.priority_label} | C{cluster_id} | "
+                f"{insight.issue_theme.title()}"
+            )
+        elif landscape_lens == "Sentiment Health":
+            color = zone_color_map.get(zone, "#64748b")
+            readable_zone = zone.replace("_", " ").title()
+            trace_name = f"C{cluster_id} | {readable_zone}"
+        else:
+            color = cluster_palette[int(cluster_id) % len(cluster_palette)]
+            theme = insight.issue_theme.title() if insight else "Theme"
+            trace_name = f"C{cluster_id} | {theme}"
+
+        hover_text = []
+        for text in np.array(texts)[mask]:
+            feedback = escape(str(text)[:180])
+            if insight is not None:
+                hover_text.append(
+                    f"<b>Cluster {cluster_id}</b><br>"
+                    f"Theme: {escape(insight.issue_theme.title())}<br>"
+                    f"Priority: {escape(insight.priority_label)} "
+                    f"({insight.priority_score:.3f})<br>"
+                    f"Negative Feedback: {sentiment_dist['NEGATIVE']:.1%}<br>"
+                    f"Action: {escape(insight.recommended_action)}<br><br>"
+                    f"Feedback: {feedback}"
+                )
+            else:
+                hover_text.append(
+                    f"<b>Cluster {cluster_id}</b><br>"
+                    f"Negative: {sentiment_dist['NEGATIVE']:.1%}<br>"
+                    f"Feedback: {feedback}"
+                )
+
+        fig.add_trace(
+            go.Scatter(
+                x=clustering_engine.tsne_projection[mask, 0],
+                y=clustering_engine.tsne_projection[mask, 1],
+                mode="markers",
+                name=trace_name,
+                marker=dict(
+                    size=(
+                        10
+                        if insight and insight.priority_label.startswith("HIGH")
+                        else 7
+                    ),
+                    color=color,
+                    opacity=0.78,
+                    line=dict(width=0.6, color="white"),
+                ),
+                text=hover_text,
+                hoverinfo="text",
+            )
+        )
+
+    fig.update_layout(
+        title=f"Experience Map - {landscape_lens}",
+        xaxis_title="Experience similarity dimension 1",
+        yaxis_title="Experience similarity dimension 2",
+        hovermode="closest",
+        legend_title="Map Legend",
+    )
+    apply_plotly_soft_ui(fig, height=560)
+    return fig
+
+
+def render_cluster_analysis(
+    audit_engine,
+    clustering_engine,
+    texts,
+    cluster_assignments,
+    action_agent,
+    action_insights,
+    top_agent_insight,
+):
+    insight_by_cluster = {item.cluster_id: item for item in action_insights}
+    high_clusters = [
+        item for item in action_insights if item.priority_label.startswith("HIGH")
+    ]
+    red_count = len(audit_engine.get_red_zones())
+    green_count = len(audit_engine.get_green_zones())
+    neutral_count = len(audit_engine.get_neutral_zones())
+
+    render_page_header(
+        "Cluster Analysis",
+        "Inspect feedback clusters, sentiment zones, representative themes, and the audit output behind the PX-Intel intelligence layer.",
+        "Model audit",
+    )
+
+    summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+    with summary_col1:
+        render_kpi_card("Feedback Entries", f"{len(texts):,}", "Mapped comments", "#3b82f6")
+    with summary_col2:
+        render_kpi_card(
+            "Experience Clusters",
+            clustering_engine.optimal_n_clusters,
+            "M1 discovery output",
+            "#06b6d4",
+        )
+    with summary_col3:
+        render_kpi_card("High Priority", len(high_clusters), "Needs action", "#ef4444")
+    with summary_col4:
+        render_kpi_card(
+            "Top Priority",
+            (
+                f"Cluster {top_agent_insight.cluster_id}"
+                if top_agent_insight is not None
+                else "None"
+            ),
+            "Highest M5 score",
+            "#d97706",
+        )
+
+    st.markdown(
+        '<h4 class="cx-section-heading">Experience Map</h4>',
+        unsafe_allow_html=True,
+    )
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        landscape_lens = st.segmented_control(
+            "Map lens",
+            ["Priority Heatmap", "Sentiment Health", "Theme Clusters"],
+            default="Priority Heatmap",
+            key="cluster_analysis_map_lens",
+        )
+        fig = build_experience_map_figure(
+            landscape_lens,
+            clustering_engine,
+            audit_engine,
+            action_insights,
+            cluster_assignments,
+            texts,
+        )
+        st.plotly_chart(fig, width="stretch")
+
+    with col2:
+        st.markdown(
+            '<h4 class="cx-section-heading">Cluster Inspector</h4>',
+            unsafe_allow_html=True,
+        )
+        if action_insights:
+            selected_map_cluster = st.selectbox(
+                "Choose a cluster",
+                [item.cluster_id for item in action_insights],
+                format_func=lambda cid: (
+                    f"Cluster {cid}: "
+                    f"{insight_by_cluster[cid].issue_theme.title()} "
+                    f"({insight_by_cluster[cid].priority_label})"
+                ),
+                key="cluster_analysis_selected_cluster",
+            )
+            selected_insight = insight_by_cluster[selected_map_cluster]
+            st.markdown(
+                '<div class="cx-graph-detail">'
+                '<span class="cx-graph-type">AI Interpretation</span>'
+                f"<h4>Cluster {selected_map_cluster}: {escape(selected_insight.issue_theme.title())}</h4>"
+                f"<p>{escape(selected_insight.key_insight)}</p>"
+                '<div class="cx-panel-soft" style="padding:0.75rem; border-radius:0.85rem; margin-top:0.75rem;">'
+                f'<strong style="color:var(--cx-ink);">Action:</strong> {escape(selected_insight.recommended_action)}'
+                "</div>"
+                '<div class="cx-panel-soft" style="padding:0.75rem; border-radius:0.85rem; margin-top:0.75rem;">'
+                f'<strong style="color:var(--cx-ink);">Root cause:</strong> {escape(selected_insight.root_cause)}'
+                "</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("No cluster insights are available yet.")
+
+        st.markdown(
+            '<h4 class="cx-section-heading">Sentiment Health</h4>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="cx-decision-card">'
+            '<div class="cx-action-meta">'
+            f"<div><span>Distress</span><strong>{red_count}</strong></div>"
+            f"<div><span>Positive</span><strong>{green_count}</strong></div>"
+            f"<div><span>Mixed</span><strong>{neutral_count}</strong></div>"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<h4 class="cx-section-heading">Cluster Auditing Results</h4>', unsafe_allow_html=True)
+    selected_cluster = st.selectbox(
+        "Select cluster",
+        sorted(audit_engine.cluster_texts.keys()),
+        format_func=lambda x: f"Cluster {x} ({audit_engine.cluster_zones[x]['zone_type']})",
+        key="cluster_analysis_audit_cluster",
+    )
+
+    if selected_cluster in audit_engine.cluster_audit_reports:
+        st.markdown(audit_engine.cluster_audit_reports[selected_cluster])
+
+    audit_df = audit_engine.export_to_dataframe()
+    render_table_section(
+        "All Clusters Audit Summary",
+        "Cluster-level sentiment, zone, vocabulary, and audit fields for deeper review.",
+        audit_df,
+        "No cluster audit rows are available yet.",
+        accent_label="Audit table",
+    )
+
+
+def render_reports_export(
+    clustering_engine,
+    texts,
+    df,
+    audit_engine,
+    causal_engine,
+    action_agent,
+    action_insights,
+):
+    render_page_header(
+        "Reports & Export",
+        "Download PX-Intel outputs and review the key data products generated by clustering, auditing, causal reasoning, and action intelligence.",
+        "Exports",
+    )
+
+    export_df = clustering_engine.export_to_dataframe(texts, df)
+    action_df = action_agent.build_dashboard_dataframe(action_insights)
+    audit_df = audit_engine.export_to_dataframe()
+    causal_df = causal_engine.export_to_dataframe()
+    impact_df = operational_impact_dataframe(
+        build_operational_impact_rows(action_insights, causal_engine)
+    )
+
+    download_cols = st.columns(5)
+    downloads = [
+        ("Enriched CSV", export_df, "cx_intel_enriched.csv"),
+        ("Action CSV", action_df, "cx_intel_action_dashboard.csv"),
+        ("Audit CSV", audit_df, "cx_intel_cluster_audit.csv"),
+        ("Causal CSV", causal_df, "cx_intel_causal_reasoning.csv"),
+        ("Impact CSV", impact_df, "px_intel_operational_impact.csv"),
+    ]
+    for col, (label, data_frame, file_name) in zip(download_cols, downloads):
+        with col:
+            st.download_button(
+                label,
+                data=data_frame.to_csv(index=False),
+                file_name=file_name,
+                mime="text/csv",
+                width="stretch",
+            )
+
+    pickle_path = Path("clustering_results.pkl")
+    if pickle_path.exists():
+        st.download_button(
+            "Download clustering pickle",
+            data=pickle_path.read_bytes(),
+            file_name="clustering_results.pkl",
+            mime="application/octet-stream",
+            width="stretch",
+        )
+
+    preview_col, summary_col = st.columns([1.45, 1])
+    with preview_col:
+        preview_df = export_df.head(12)
+        render_table_header(
+            "Data Preview",
+            "A quick sample of the enriched PX-Intel output before export.",
+            preview_df,
+            accent_label="Preview table",
+        )
+        st.dataframe(preview_df, width="stretch", hide_index=True, height=360)
+
+    with summary_col:
+        st.markdown(
+            '<h4 class="cx-section-heading">Clustering Summary</h4>',
+            unsafe_allow_html=True,
+        )
+        st.info(clustering_engine.get_cluster_summary())
+
+    with st.expander("M3 causal model details"):
+        st.markdown(causal_engine.get_summary())
+        cluster_options = sorted(causal_engine.cluster_lda_features.keys())
+        if cluster_options:
+            selected_cluster = st.selectbox(
+                "Review cluster causal details",
+                cluster_options,
+                format_func=lambda cluster_id: f"Cluster {cluster_id}",
+                key="reports_causal_detail_cluster",
+            )
+            st.markdown(causal_engine.get_cluster_summary(selected_cluster))
+        render_table_header(
+            "Causal Relationship Export",
+            "Detailed M3 causal reasoning rows available for download and review.",
+            causal_df,
+            accent_label="Model table",
+        )
+        st.dataframe(causal_df, width="stretch", hide_index=True, height=360)
 
 
 # ============================================================================
@@ -257,6 +3959,7 @@ def run_causal_reasoning(
 
 def main():
     """Main dashboard flow."""
+    active_section = render_sidebar()
 
     # Load data and run clustering
     with st.spinner("Loading data and discovering clusters..."):
@@ -292,12 +3995,92 @@ def main():
         clustering_engine=clustering_engine,
     )
 
-    tab_action, tab_landscape, tab_audit, tab_causal, tab_data = st.tabs(
+    high_priority_count = sum(
+        1 for insight in action_insights if insight.priority_label.startswith("HIGH")
+    )
+    medium_priority_count = sum(
+        1
+        for insight in action_insights
+        if insight.priority_label.startswith("MEDIUM")
+    )
+    top_agent_insight = action_insights[0] if action_insights else None
+
+    if active_section == "Customer Intelligence":
+        render_customer_intelligence(audit_engine, action_insights, texts)
+        return
+
+    if active_section == "Cause & Effect Graph":
+        render_cause_effect_graph(
+            audit_engine,
+            causal_engine,
+            action_insights,
+            df,
+            cluster_assignments,
+        )
+        return
+
+    if active_section == "Operational Impact":
+        render_operational_impact(causal_engine, action_insights)
+        return
+
+    if active_section == "Cluster Analysis":
+        render_cluster_analysis(
+            audit_engine,
+            clustering_engine,
+            texts,
+            cluster_assignments,
+            action_agent,
+            action_insights,
+            top_agent_insight,
+        )
+        return
+
+    if active_section == "Reports & Export":
+        render_reports_export(
+            clustering_engine,
+            texts,
+            df,
+            audit_engine,
+            causal_engine,
+            action_agent,
+            action_insights,
+        )
+        return
+
+    render_overview(
+        audit_engine,
+        causal_engine,
+        clustering_engine,
+        texts,
+        action_agent,
+        action_insights,
+        top_agent_insight,
+        high_priority_count,
+        medium_priority_count,
+    )
+    return
+
+    st.markdown('<h3 class="cx-section-heading">PX-Intel Overview</h3>', unsafe_allow_html=True)
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    with kpi_col1:
+        render_kpi_card("Feedback Entries", f"{len(texts):,}", "Loaded from PX-Intel data", "#3b82f6")
+    with kpi_col2:
+        render_kpi_card("Experience Clusters", clustering_engine.optimal_n_clusters, "Auto-selected by M1", "#06b6d4")
+    with kpi_col3:
+        render_kpi_card("High Priority", high_priority_count, "M5 action score", "#ef4444")
+    with kpi_col4:
+        render_kpi_card("Medium Priority", medium_priority_count, "Watchlist clusters", "#d97706")
+
+    if active_section != "Overview":
+        st.info(
+            f"{active_section} is still available in the dashboard tabs below while the sidebar workspace is being expanded."
+        )
+
+    tab_action, tab_landscape, tab_audit, tab_data = st.tabs(
         [
             "🤖 AI Agent (M5)",
             "🗺️ Experience Map",
             "📊 Cluster Audit",
-            "⚡ Operational Impact",
             "📋 Data Export",
         ]
     )
@@ -307,36 +4090,46 @@ def main():
     # ====================================================================
 
     with tab_action:
-        st.markdown("### AI Agent Decision Support")
+        st.markdown(
+            '<h3 class="cx-section-heading">AI Agent Decision Support</h3>',
+            unsafe_allow_html=True,
+        )
         st.caption(
-            "M5 translates M1-M3 model outputs into practical next steps for service managers."
+            "M5 translates PX-Intel model outputs into a manager-facing decision workspace."
         )
 
-        high_priority_count = sum(
-            1 for insight in action_insights if insight.priority_label.startswith("HIGH")
-        )
-        medium_priority_count = sum(
-            1
-            for insight in action_insights
-            if insight.priority_label.startswith("MEDIUM")
-        )
-        soft_cascade_count = sum(len(insight.cascades) for insight in action_insights)
+        decision_col, outline_col = st.columns([1.35, 1])
+        with decision_col:
+            render_decision_summary_card(
+                top_agent_insight,
+                len(action_insights),
+                high_priority_count,
+                medium_priority_count,
+            )
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Agent Insights", len(action_insights))
-        with col2:
-            st.metric("High Priority", high_priority_count)
-        with col3:
-            st.metric("Medium Priority", medium_priority_count)
-        with col4:
-            st.metric("Soft Cascades", soft_cascade_count)
-
-        st.markdown("### Ask the CX Agent")
-        st.caption(
-            "Use the chat to turn the analysis into management decisions. "
-            "It answers from the cluster insights already generated in this run."
-        )
+        with outline_col:
+            st.markdown(
+                f"""
+                <div class="cx-decision-card">
+                    <div class="cx-card-topline">
+                        <span class="cx-icon-block">DS</span>
+                        <span class="cx-chip">Outline</span>
+                    </div>
+                    <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Decision support layout</p>
+                    <h4 style="margin:0 0 0.5rem;">What this area should help answer</h4>
+                    <p style="margin:0 0 0.5rem;">1. What needs attention first?</p>
+                    <p style="margin:0 0 0.5rem;">2. What evidence supports the recommendation?</p>
+                    <p style="margin:0 0 0.5rem;">3. What operational action should a manager take?</p>
+                    <p style="margin:0;">4. Which clusters should be monitored next?</p>
+                    <div class="cx-action-meta">
+                        <div><span>Insights</span><strong>{len(action_insights)}</strong></div>
+                        <div><span>High</span><strong>{high_priority_count}</strong></div>
+                        <div><span>Medium</span><strong>{medium_priority_count}</strong></div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         if "cx_agent_messages" not in st.session_state:
             st.session_state.cx_agent_messages = [
@@ -348,12 +4141,20 @@ def main():
                 }
             ]
 
+        st.markdown(
+            '<h4 class="cx-section-heading">Ask PX-Intel Agent</h4>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Use the prompts to inspect the existing M5 action insights without changing the underlying pipeline."
+        )
+
         prompt_cols = st.columns(4)
         suggested_prompts = [
-            "What should we fix first?",
-            "Summarize this for leadership.",
-            "Which cascades should we watch?",
-            "What actions should managers take?",
+            "What needs attention first?",
+            "Show the evidence.",
+            "Draft manager actions.",
+            "Which clusters should we monitor?",
         ]
         for col, prompt in zip(prompt_cols, suggested_prompts):
             with col:
@@ -387,14 +4188,21 @@ def main():
             )
             st.rerun()
 
-        st.markdown("---")
-        st.markdown("### Customer Experience Action Dashboard")
-
-        priority_filter = st.segmented_control(
-            "Priority filter",
-            options=["All", "HIGH 🔥", "MEDIUM ⚠", "LOW ✅"],
-            default="All",
+        st.markdown(
+            '<h3 class="cx-section-heading">Customer Experience Action Dashboard</h3>',
+            unsafe_allow_html=True,
         )
+        st.caption(
+            "The action board below is a cleaner visual outline over the existing PX-Intel action dataframe."
+        )
+
+        filter_col, download_col = st.columns([2.3, 1])
+        with filter_col:
+            priority_filter = st.segmented_control(
+                "Priority filter",
+                options=["All", "HIGH 🔥", "MEDIUM ⚠", "LOW ✅"],
+                default="All",
+            )
         filtered_insights = (
             action_insights
             if priority_filter == "All"
@@ -405,17 +4213,84 @@ def main():
             ]
         )
 
+        if st.session_state.get("action_priority_filter") != priority_filter:
+            st.session_state.action_priority_filter = priority_filter
+            st.session_state.action_dashboard_page = 0
+
         action_df = action_agent.build_dashboard_dataframe(filtered_insights)
-        st.dataframe(action_df, use_container_width=True, hide_index=True)
+        with download_col:
+            st.download_button(
+                label="Download action data (CSV)",
+                data=action_df.to_csv(index=False),
+                file_name="cx_intel_action_dashboard.csv",
+                mime="text/csv",
+                help="Download the currently selected action data.",
+                width="stretch",
+            )
 
-        st.download_button(
-            label="📥 Download Action Dashboard CSV",
-            data=action_df.to_csv(index=False),
-            file_name="cx_intel_action_dashboard.csv",
-            mime="text/csv",
+        page_size = 4
+        total_pages = max(1, int(np.ceil(len(filtered_insights) / page_size)))
+        current_page = min(
+            st.session_state.get("action_dashboard_page", 0),
+            total_pages - 1,
         )
+        st.session_state.action_dashboard_page = current_page
+        page_start = current_page * page_size
+        page_end = page_start + page_size
+        visible_insights = filtered_insights[page_start:page_end]
 
-        st.markdown("### Cluster Action Details")
+        if filtered_insights:
+            nav_left, nav_mid, nav_right = st.columns([1, 2, 1])
+            with nav_left:
+                if st.button(
+                    "Previous",
+                    key="action_dashboard_previous",
+                    disabled=current_page == 0,
+                    width="stretch",
+                ):
+                    st.session_state.action_dashboard_page = max(current_page - 1, 0)
+                    st.rerun()
+            with nav_mid:
+                st.markdown(
+                    f"""
+                    <div class="cx-panel-soft" style="padding:0.65rem; border-radius:0.85rem; text-align:center;">
+                        Showing actions {page_start + 1}-{min(page_end, len(filtered_insights))} of {len(filtered_insights)}
+                        &nbsp;|&nbsp; Page {current_page + 1} of {total_pages}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with nav_right:
+                if st.button(
+                    "Next",
+                    key="action_dashboard_next",
+                    disabled=current_page >= total_pages - 1,
+                    width="stretch",
+                ):
+                    st.session_state.action_dashboard_page = min(
+                        current_page + 1,
+                        total_pages - 1,
+                    )
+                    st.rerun()
+
+            for start in range(0, len(visible_insights), 2):
+                card_cols = st.columns(2)
+                for offset, card_col in enumerate(card_cols):
+                    insight_index = start + offset
+                    if insight_index >= len(visible_insights):
+                        continue
+                    with card_col:
+                        render_action_outline_card(
+                            visible_insights[insight_index],
+                            page_start + insight_index + 1,
+                        )
+        else:
+            st.info("No action insights match this priority filter.")
+
+        st.markdown(
+            '<h4 class="cx-section-heading">Cluster Action Details</h4>',
+            unsafe_allow_html=True,
+        )
         for insight in filtered_insights:
             with st.expander(
                 f"AI Agent Insight | Cluster {insight.cluster_id}: {insight.issue_theme.title()} "
@@ -438,10 +4313,6 @@ def main():
                 st.markdown("**Root Cause**")
                 st.write(insight.root_cause)
 
-                st.markdown("**Soft Cascades**")
-                for cascade in insight.cascades:
-                    st.write(f"- {cascade}")
-
                 st.markdown("**Example Feedback**")
                 st.info(insight.example_feedback)
 
@@ -453,7 +4324,6 @@ def main():
         high_clusters = [
             item for item in action_insights if item.priority_label.startswith("HIGH")
         ]
-        top_agent_insight = action_insights[0] if action_insights else None
 
         st.markdown("### Agent Summary")
         st.info(action_agent.answer_question("summarize for leadership", action_insights))
@@ -586,12 +4456,12 @@ def main():
                 xaxis_title="Experience Similarity Dimension 1",
                 yaxis_title="Experience Similarity Dimension 2",
                 hovermode="closest",
-                height=560,
                 width=800,
                 legend_title="Map Legend",
             )
+            apply_plotly_soft_ui(fig, height=560)
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         with col2:
             st.markdown("### Cluster Inspector")
@@ -613,9 +4483,8 @@ def main():
             st.markdown("**Recommended Action**")
             st.success(selected_insight.recommended_action)
 
-            st.markdown("**Soft Cascades**")
-            for cascade in selected_insight.cascades[:3]:
-                st.write(f"- {cascade}")
+            st.markdown("**Root Cause**")
+            st.write(selected_insight.root_cause)
 
             if st.button(
                 f"Ask Agent about Cluster {selected_map_cluster}",
@@ -670,53 +4539,10 @@ def main():
         # Display audit DataFrame
         st.markdown("### All Clusters Summary")
         audit_df = audit_engine.export_to_dataframe()
-        st.dataframe(audit_df, use_container_width=True)
+        st.dataframe(audit_df, width="stretch")
 
     # ====================================================================
-    # Tab 3: Causal Analysis
-    # ====================================================================
-
-    with tab_causal:
-        st.markdown("### Operational Impact Results")
-        st.markdown(causal_engine.get_summary())
-
-        cluster_options = sorted(causal_engine.cluster_lda_features.keys())
-        if cluster_options:
-            selected_causal_cluster = st.selectbox(
-                "Select Cluster for Causal Details",
-                cluster_options,
-                format_func=lambda x: f"Cluster {x} ({audit_engine.cluster_zones.get(x, {}).get('zone_type', 'UNKNOWN')})",
-            )
-
-            st.markdown(causal_engine.get_cluster_summary(selected_causal_cluster))
-
-            cascades = causal_engine.cascade_predictions.get(
-                selected_causal_cluster, []
-            )
-            st.markdown(
-                f"#### Cascade Predictions for Cluster {selected_causal_cluster}"
-            )
-
-            if cascades:
-                for cascade in cascades:
-                    st.info(f"""
-                    **→ Cluster {cascade['target_cluster']}**  
-                    Similarity: {cascade['similarity']:.1%}  
-                    Cascade Likelihood: {cascade['cascade_likelihood']:.0%}  
-                    {cascade['cascade_interpretation']}
-                    """)
-            else:
-                st.info("No significant cascades detected for this cluster.")
-        else:
-            st.info("No causal clusters are available yet.")
-
-        # Causal DataFrame
-        st.markdown("### Operational Impact Summary")
-        causal_df = causal_engine.export_to_dataframe()
-        st.dataframe(causal_df, use_container_width=True)
-
-    # ====================================================================
-    # Tab 4: Data Export
+    # Tab 3: Data Export
     # ====================================================================
 
     with tab_data:
@@ -767,7 +4593,7 @@ def main():
 
         with col2:
             st.markdown("#### Data Preview")
-            st.dataframe(export_df.head(10), use_container_width=True)
+            st.dataframe(export_df.head(10), width="stretch")
 
         st.markdown("#### Clustering Summary")
         st.info(clustering_engine.get_cluster_summary())

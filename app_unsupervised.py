@@ -9,12 +9,20 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import io
+import hashlib
+import json
+import os
 from html import escape
 from data_loader import DataLoader, LoaderStats
 from unsupervised_clustering import UnsupervisedClusteringEngine
 from cluster_audit import ClusterAuditEngine
 from causal_reasoning import CausalReasoningEngine
-from agent.action_intelligence import CXActionIntelligenceAgent
+from agent.action_intelligence import (
+    CXActionIntelligenceAgent,
+    insight_display_name,
+    signal_reference,
+)
+from agent.ai_enhancement import AIEnhancementError, OpenAIInsightEnhancer
 from pathlib import Path
 
 # ============================================================================
@@ -1125,6 +1133,35 @@ def build_feedback_source(uploaded_file, selected_column=None):
     }
 
 
+def read_openai_key_from_config():
+    """Read an OpenAI key from Streamlit secrets or the shell environment."""
+    try:
+        secret_key = st.secrets.get("OPENAI_API_KEY", "")
+    except Exception:
+        secret_key = ""
+    return str(secret_key or os.getenv("OPENAI_API_KEY", "")).strip()
+
+
+def read_openai_model_from_config():
+    """Read the preferred AI model from config with a low-cost default."""
+    try:
+        secret_model = st.secrets.get("OPENAI_MODEL", "")
+    except Exception:
+        secret_model = ""
+    return str(secret_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")).strip()
+
+
+def build_ai_config(api_key, model, enabled, refresh_requested=False):
+    """Return normalized optional AI enhancement settings."""
+    clean_key = str(api_key or "").strip()
+    return {
+        "enabled": bool(enabled and clean_key),
+        "api_key": clean_key,
+        "model": str(model or "gpt-4o-mini").strip(),
+        "refresh_requested": bool(refresh_requested),
+    }
+
+
 def render_sidebar():
     """Render Soft UI-inspired PX-Intel navigation context."""
     with st.sidebar:
@@ -1145,7 +1182,7 @@ def render_sidebar():
             "Overview": "01  Overview",
             "Customer Intelligence": "02  Customer Intelligence",
             "Cause & Effect Graph": "03  Cause & Effect Graph",
-            "Cluster Analysis": "04  Cluster Analysis",
+            "Cluster Analysis": "04  Signal Analysis",
             "Operational Impact": "05  Operational Impact",
             "Reports & Export": "06  Reports & Export",
         }
@@ -1196,6 +1233,49 @@ def render_sidebar():
                     st.error(f"Upload could not be read: {exc}")
                     st.caption("PX-Intel will continue using the bundled sample data.")
 
+        configured_key = read_openai_key_from_config()
+        configured_model = read_openai_model_from_config()
+        with st.expander("AI enhancement", expanded=False):
+            st.caption(
+                "Optional: use an OpenAI key to sharpen report language, agent answers, and signal naming."
+            )
+            entered_key = st.text_input(
+                "OpenAI API key",
+                value="",
+                type="password",
+                placeholder="Uses secrets/env if left blank",
+                key="openai_api_key_input",
+            )
+            ai_model = st.text_input(
+                "AI model",
+                value=configured_model,
+                key="openai_model_input",
+            )
+            ai_key = entered_key.strip() or configured_key
+            ai_enabled = st.toggle(
+                "Use AI-enhanced language",
+                value=bool(ai_key),
+                key="ai_enhancement_enabled",
+                help="The deterministic PX-Intel pipeline still runs first. AI only rewrites manager-facing language from the existing evidence.",
+            )
+            refresh_requested = False
+            if ai_enabled and ai_key:
+                st.success("AI enhancement ready.")
+                refresh_requested = st.button(
+                    "Refresh AI language",
+                    key="refresh_ai_language",
+                    help="Regenerate enhanced signal names and recommendations for the current data.",
+                )
+            else:
+                st.caption("PX-Intel will use the local rule-based intelligence layer.")
+
+        ai_config = build_ai_config(
+            ai_key,
+            ai_model,
+            ai_enabled,
+            refresh_requested,
+        )
+
         st.markdown(
             """
             <div class="cx-sidebar-card">
@@ -1207,14 +1287,14 @@ def render_sidebar():
                     <span class="cx-status-pill">Live</span>
                 </div>
                 <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-green"></span><span>Feedback ingestion ready</span></div>
-                <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-amber"></span><span>Cluster audit cache enabled</span></div>
+                <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-amber"></span><span>Signal audit cache enabled</span></div>
                 <div class="cx-sidebar-status-row"><span class="cx-status-dot cx-dot-red"></span><span>High-priority issues surfaced first</span></div>
                 <p style="font-size: 0.8rem; margin:0.72rem 0 0;">M4 + M5 pipeline is preserved across every workspace.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        return selected_section, feedback_source
+        return selected_section, feedback_source, ai_config
 
 
 def render_hero():
@@ -1224,7 +1304,7 @@ def render_hero():
             <div class="cx-hero-grid">
                 <div>
                     <p class="cx-eyebrow">PX-Intel AI business intelligence</p>
-                    <h1>Turn feedback clusters into faster service decisions.</h1>
+                    <h1>Turn feedback signals into faster service decisions.</h1>
                     <p>Service feedback discovery, customer intelligence, operational impact, and AI-assisted action support powered by the existing PX-Intel pipeline.</p>
                 </div>
                 <div>
@@ -1237,7 +1317,7 @@ def render_hero():
                             <span style="padding:0.32rem 0.6rem; border-radius:999px; background:rgba(16,185,129,0.14); color:#059669; font-weight:800; font-size:0.75rem;">Live</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.55rem;"><span class="cx-status-dot cx-dot-green"></span><span>Feedback ingestion ready</span></div>
-                        <div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.55rem;"><span class="cx-status-dot cx-dot-amber"></span><span>Cluster audit cache enabled</span></div>
+                        <div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.55rem;"><span class="cx-status-dot cx-dot-amber"></span><span>Signal audit cache enabled</span></div>
                         <div style="display:flex; align-items:center; gap:0.55rem;"><span class="cx-status-dot cx-dot-red"></span><span>High-priority issues surfaced first</span></div>
                     </div>
                 </div>
@@ -1254,7 +1334,7 @@ def render_slogan_strip():
         <section class="cx-slogan-strip">
             <div>
                 <p class="cx-eyebrow">PX-Intel AI business intelligence</p>
-                <h1>Turn feedback clusters into faster service decisions.</h1>
+                <h1>Turn feedback signals into faster service decisions.</h1>
                 <p>Service feedback discovery, customer intelligence, operational impact, and AI-assisted action support powered by the existing PX-Intel pipeline.</p>
             </div>
             <span class="cx-slogan-badge">Decision support</span>
@@ -1351,7 +1431,7 @@ def render_decision_summary_card(top_insight, insight_count, high_count, medium_
             <div class="cx-decision-card featured">
                 <div class="cx-card-topline">
                     <span class="cx-icon-block">AI</span>
-                    <span class="cx-chip">No clusters</span>
+                    <span class="cx-chip">No signals</span>
                 </div>
                 <h3 style="margin:0 0 0.5rem;">No action insight is available yet.</h3>
                 <p style="margin:0;">Run the PX-Intel pipeline with feedback data to populate decision support.</p>
@@ -1361,7 +1441,7 @@ def render_decision_summary_card(top_insight, insight_count, high_count, medium_
         )
         return
 
-    theme = escape(top_insight.issue_theme.title())
+    signal_name = escape(insight_display_name(top_insight, include_reference=True))
     insight = escape(top_insight.key_insight)
     action = escape(top_insight.recommended_action)
     badge_class = priority_class(top_insight.priority_label)
@@ -1373,7 +1453,7 @@ def render_decision_summary_card(top_insight, insight_count, high_count, medium_
                 <span class="cx-chip {badge_class}">{escape(top_insight.priority_label)}</span>
             </div>
             <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Recommended first move</p>
-            <h3 style="margin:0 0 0.5rem;">Cluster {top_insight.cluster_id}: {theme}</h3>
+            <h3 style="margin:0 0 0.5rem;">{signal_name}</h3>
             <p style="margin:0 0 0.65rem;">{insight}</p>
             <div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem;">
                 <strong style="color:var(--cx-ink);">Action:</strong>
@@ -1393,6 +1473,7 @@ def render_decision_summary_card(top_insight, insight_count, high_count, medium_
 def render_action_outline_card(insight, index):
     badge_class = priority_class(insight.priority_label)
     keywords = ", ".join(insight.keywords[:4]) if insight.keywords else "No keywords"
+    signal_name = escape(insight_display_name(insight, include_reference=True))
     st.markdown(
         f"""
         <div class="cx-action-card">
@@ -1401,7 +1482,7 @@ def render_action_outline_card(insight, index):
                 <span class="cx-chip {badge_class}">{escape(insight.priority_label)}</span>
             </div>
             <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Customer experience action</p>
-            <h4 style="margin:0 0 0.35rem;">Cluster {insight.cluster_id}: {escape(insight.issue_theme.title())}</h4>
+            <h4 style="margin:0 0 0.35rem;">{signal_name}</h4>
             <p style="margin:0 0 0.75rem;">{escape(insight.key_insight)}</p>
             <div class="cx-action-meta">
                 <div><span>Size</span><strong>{insight.metadata.get("cluster_size", 0):,}</strong></div>
@@ -1438,6 +1519,7 @@ def render_customer_segment_card(insight, index):
     negative_rate = insight.metadata.get("negative_rate", 0)
     cluster_share = insight.metadata.get("cluster_share", 0)
     example = escape(insight.example_feedback)
+    signal_name = escape(insight_display_name(insight))
 
     st.markdown(
         f"""
@@ -1447,7 +1529,7 @@ def render_customer_segment_card(insight, index):
                 <span class="cx-chip {lens_class}">{escape(lens)}</span>
             </div>
             <p class="cx-eyebrow" style="margin-bottom:0.35rem;">Customer segment</p>
-            <h4 class="cx-segment-title">Customers affected by {escape(insight.issue_theme.title())}</h4>
+            <h4 class="cx-segment-title">{signal_name}</h4>
             <p style="margin:0 0 0.7rem;">{escape(insight.key_insight)}</p>
             <div class="cx-action-meta">
                 <div><span>Feedback</span><strong>{insight.metadata.get("cluster_size", 0):,}</strong></div>
@@ -1473,9 +1555,10 @@ def render_customer_signal_panel(title, subtitle, insights):
         items = []
         for insight in insights[:4]:
             negative_rate = insight.metadata.get("negative_rate", 0)
+            signal_name = escape(insight_display_name(insight, include_reference=True))
             items.append(
                 '<div class="cx-signal-item">'
-                f'<h5>Cluster {insight.cluster_id}: {escape(insight.issue_theme.title())}</h5>'
+                f"<h5>{signal_name}</h5>"
                 f"<p>{escape(insight.key_insight)}</p>"
                 '<div class="cx-token-row">'
                 f'<span class="cx-token">{escape(insight.priority_label)}</span>'
@@ -1499,8 +1582,10 @@ def build_customer_voice_dataframe(insights):
     return pd.DataFrame(
         [
             {
+                "Signal ID": signal_reference(insight.cluster_id),
+                "Experience Signal": insight_display_name(insight),
                 "Cluster": insight.cluster_id,
-                "Customer Segment": f"Customers affected by {insight.issue_theme.title()}",
+                "Customer Segment": insight_display_name(insight),
                 "Signal Type": customer_lens_for_insight(insight),
                 "Sentiment": insight.sentiment_label.title(),
                 "Priority": insight.priority_label,
@@ -1531,6 +1616,7 @@ def filter_customer_insights(insights, lens, query):
         in " ".join(
             [
                 insight.issue_theme,
+                insight_display_name(insight),
                 insight.key_insight,
                 insight.example_feedback,
                 insight.recommended_action,
@@ -1592,7 +1678,7 @@ def render_customer_intelligence_graphics(insights):
             reverse=True,
         )[:6]
         bar_labels = [
-            f"C{insight.cluster_id}: {insight.issue_theme.title()}"
+            f"{signal_reference(insight.cluster_id)} · {insight_display_name(insight)}"
             for insight in top_risk_rows
         ]
         negative_rates = [
@@ -1649,9 +1735,9 @@ def render_customer_intelligence(audit_engine, action_insights, texts):
     with metric_col1:
         render_kpi_card("Feedback Reviewed", f"{len(texts):,}", "Voice-of-customer base", "#3b82f6")
     with metric_col2:
-        render_kpi_card("At-Risk Segments", red_count, "Negative-dominant clusters", "#ef4444")
+        render_kpi_card("At-Risk Segments", red_count, "Negative-dominant signals", "#ef4444")
     with metric_col3:
-        render_kpi_card("Opportunity Segments", green_count, "Positive-dominant clusters", "#10b981")
+        render_kpi_card("Opportunity Segments", green_count, "Positive-dominant signals", "#10b981")
     with metric_col4:
         render_kpi_card("Top Customer Theme", top_theme, f"{avg_negative:.0%} avg negative", "#8b5cf6")
 
@@ -1902,7 +1988,7 @@ def filter_cause_effect_insights(
         filtered = [
             insight
             for insight in filtered
-            if f"Cluster {insight.cluster_id}" == cluster_filter
+            if signal_reference(insight.cluster_id) == cluster_filter
         ]
     if theme_filter != "All":
         filtered = [
@@ -1937,7 +2023,7 @@ def graph_node_marker_label(node):
         "impact": "RISK",
         "action": "ACT",
     }
-    return f"C{node['cluster_id']}<br>{label_map.get(node['type'], 'NODE')}"
+    return f"{signal_reference(node['cluster_id'])}<br>{label_map.get(node['type'], 'NODE')}"
 
 
 def add_graph_node(
@@ -2009,6 +2095,8 @@ def build_cause_effect_graph(action_insights, causal_engine):
 
     for row_index, insight in enumerate(action_insights):
         cluster_id = insight.cluster_id
+        signal_name = insight_display_name(insight)
+        signal_name_with_ref = insight_display_name(insight, include_reference=True)
         y_base = -row_index * 2.05
         priority_key = insight.priority_label.split()[0]
         sentiment_key = str(insight.sentiment_label).upper()
@@ -2023,7 +2111,7 @@ def build_cause_effect_graph(action_insights, causal_engine):
             "priority_score": insight.priority_score,
             "sentiment": insight.sentiment_label,
             "root_cause": insight.root_cause,
-            "issue_theme": insight.issue_theme,
+            "issue_theme": signal_name,
         }
 
         feedback_id = f"feedback-{cluster_id}"
@@ -2038,7 +2126,7 @@ def build_cause_effect_graph(action_insights, causal_engine):
         add_graph_node(
             nodes,
             feedback_id,
-            f"Feedback C{cluster_id}",
+            f"Feedback: {signal_reference(cluster_id)}",
             "feedback",
             x=0,
             y=y_base,
@@ -2074,7 +2162,7 @@ def build_cause_effect_graph(action_insights, causal_engine):
         add_graph_node(
             nodes,
             issue_id,
-            f"Issue C{cluster_id}: {insight.issue_theme.title()}",
+            signal_name_with_ref,
             "issue",
             x=3.35,
             y=y_base + 0.18,
@@ -2086,13 +2174,13 @@ def build_cause_effect_graph(action_insights, causal_engine):
         add_graph_node(
             nodes,
             segment_id,
-            f"Segment C{cluster_id}",
+            f"Segment: {signal_name}",
             "customer_segment",
             x=4.75,
             y=y_base + 0.28,
             color="#2563eb",
             size=node_size + 1,
-            description=f"Customers affected by {insight.issue_theme.title()}.",
+            description=f"Customers affected by {signal_name}.",
             **common,
         )
         add_graph_node(
@@ -2105,7 +2193,7 @@ def build_cause_effect_graph(action_insights, causal_engine):
             color=sentiment_color,
             size=24,
             description=(
-                f"{insight.metadata.get('negative_rate', 0):.0%} of this cluster is negative."
+                f"{insight.metadata.get('negative_rate', 0):.0%} of this signal is negative."
             ),
             **common,
         )
@@ -2207,8 +2295,8 @@ def build_cause_effect_graph(action_insights, causal_engine):
                 "issue_impacts_segment",
                 cascade.get("cascade_likelihood", 0),
                 (
-                    f"Shared-pattern cascade: fixing Cluster {insight.cluster_id} "
-                    f"may affect Cluster {target_cluster}."
+                    f"Shared-pattern cascade: fixing {signal_reference(insight.cluster_id)} "
+                    f"may affect {signal_reference(target_cluster)}."
                 ),
             )
 
@@ -2306,7 +2394,7 @@ def create_cause_effect_figure(nodes, edges):
                 hovertext=[
                     (
                         f"{node_type_label(node['type'])}<br>"
-                        f"Cluster {node['cluster_id']}<br>"
+                        f"{signal_reference(node['cluster_id'])}<br>"
                         f"{escape(shorten_text(node['label'], 120))}<br>"
                         f"{escape(shorten_text(node['description'], 140))}"
                     )
@@ -2415,7 +2503,7 @@ def render_graph_node_detail(selected_node_id, nodes, edges):
         f'<h4 style="margin:0.7rem 0 0.35rem;">{escape(node["label"])}</h4>'
         f'<p style="margin:0 0 0.75rem;">{escape(node["description"])}</p>'
         '<div class="cx-action-meta">'
-        f'<div><span>Cluster</span><strong>{node["cluster_id"]}</strong></div>'
+        f'<div><span>Signal</span><strong>{signal_reference(node["cluster_id"])}</strong></div>'
         f'<div><span>Priority</span><strong>{escape(str(node["priority"]))}</strong></div>'
         f'<div><span>Sentiment</span><strong>{escape(str(node["sentiment"]).title())}</strong></div>'
         "</div>"
@@ -2446,7 +2534,7 @@ def render_cause_effect_readout(insights):
     cards = [
         (
             "Priority path",
-            f"Cluster {top.cluster_id}: {top.issue_theme.title()}",
+            insight_display_name(top, include_reference=True),
             f"{top.priority_label} with {top.metadata.get('negative_rate', 0):.0%} negative feedback.",
         ),
         (
@@ -2456,7 +2544,7 @@ def render_cause_effect_readout(insights):
         ),
         (
             "Best next action",
-            f"Cluster {top_action.cluster_id}",
+            insight_display_name(top_action, include_reference=True),
             top_action.recommended_action,
         ),
     ]
@@ -2502,9 +2590,9 @@ def graph_category_nodes(nodes, category):
 
 def graph_category_button_label(node):
     node_type = node["type"]
-    cluster = f"C{node['cluster_id']}"
+    cluster = signal_reference(node["cluster_id"])
     if node_type == "issue":
-        return f"{cluster} · {node['issue_theme'].title()}"
+        return f"{cluster} · {node['issue_theme']}"
     if node_type == "impact":
         return f"{cluster} · {node['priority']}"
     if node_type == "root_cause":
@@ -2512,7 +2600,7 @@ def graph_category_button_label(node):
     if node_type == "action":
         return f"{cluster} · {shorten_text(node['recommended_action'], 42)}"
     if node_type == "customer_segment":
-        return f"{cluster} · Customers affected by {node['issue_theme'].title()}"
+        return f"{cluster} · {node['issue_theme']}"
     if node_type == "feedback":
         return f"{cluster} · {shorten_text(node['evidence'], 42)}"
     if node_type == "sentiment":
@@ -2526,7 +2614,7 @@ def render_graph_category_selector(nodes):
         unsafe_allow_html=True,
     )
     st.caption(
-        "Start with a business category, then choose the cluster signal you want to inspect."
+        "Start with a business category, then choose the experience signal you want to inspect."
     )
     category_options = [
         "Issues",
@@ -2663,10 +2751,11 @@ def render_cause_effect_graph(
         {insight.priority_label for insight in action_insights},
         key=lambda label: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(label.split()[0], 9),
     )
-    cluster_options = ["All"] + [
-        f"Cluster {insight.cluster_id}"
+    signal_label_map = {
+        signal_reference(insight.cluster_id): insight_display_name(insight)
         for insight in sorted(action_insights, key=lambda item: item.cluster_id)
-    ]
+    }
+    cluster_options = ["All"] + list(signal_label_map.keys())
     theme_options = ["All"] + sorted(
         {insight.issue_theme.title() for insight in action_insights}
     )
@@ -2686,8 +2775,9 @@ def render_cause_effect_graph(
         )
     with filter_cols[2]:
         cluster_filter = st.selectbox(
-            "Cluster",
+            "Signal",
             cluster_options,
+            format_func=lambda value: "All" if value == "All" else f"{value} · {signal_label_map[value]}",
             key="cause_effect_cluster_filter",
         )
     with filter_cols[3]:
@@ -2746,7 +2836,7 @@ def render_cause_effect_graph(
     )
     with density_note_col:
         st.caption(
-            "The graph defaults to the top priority clusters so the flow stays readable. Use All Matching when you need the complete relationship map."
+            "The graph defaults to the top priority signals so the flow stays readable. Use All Matching when you need the complete relationship map."
         )
 
     render_cause_effect_readout(filtered_insights)
@@ -2759,7 +2849,7 @@ def render_cause_effect_graph(
     with metric_cols[1]:
         render_kpi_card("Relationships", len(edges), "Weighted evidence links", "#06b6d4")
     with metric_cols[2]:
-        render_kpi_card("Clusters Shown", len(filtered_insights), "After filters", "#8b5cf6")
+        render_kpi_card("Signals Shown", len(filtered_insights), "After filters", "#8b5cf6")
     with metric_cols[3]:
         render_kpi_card(
             "Causal Links",
@@ -2855,6 +2945,8 @@ def build_operational_impact_rows(action_insights, causal_engine):
         )
         row = {
             "cluster_id": insight.cluster_id,
+            "signal_id": signal_reference(insight.cluster_id),
+            "signal_name": insight_display_name(insight),
             "theme": insight.issue_theme.title(),
             "priority": insight.priority_label,
             "priority_score": insight.priority_score,
@@ -2892,7 +2984,7 @@ def filter_operational_impact_rows(rows, focus_filter, priority_filter, cluster_
         filtered = [row for row in filtered if row["priority"] == priority_filter]
     if cluster_filter != "All":
         filtered = [
-            row for row in filtered if f"Cluster {row['cluster_id']}" == cluster_filter
+            row for row in filtered if row["signal_id"] == cluster_filter
         ]
     if theme_filter != "All":
         filtered = [row for row in filtered if row["theme"] == theme_filter]
@@ -2903,6 +2995,8 @@ def operational_impact_dataframe(rows):
     return pd.DataFrame(
         [
             {
+                "Signal ID": row["signal_id"],
+                "Experience Signal": row["signal_name"],
                 "Cluster": row["cluster_id"],
                 "Theme": row["theme"],
                 "Impact Type": row["impact_type"],
@@ -2913,7 +3007,7 @@ def operational_impact_dataframe(rows):
                 "Negative Rate": f"{row['negative_rate']:.0%}",
                 "Feedback Volume": row["cluster_size"],
                 "Cascade Targets": ", ".join(
-                    [f"C{target}" for target in row["cascade_targets"]]
+                    [signal_reference(target) for target in row["cascade_targets"]]
                 )
                 or "None",
                 "Root Cause": row["root_cause"],
@@ -2933,7 +3027,7 @@ def render_operational_impact_card(row, index):
         else "low"
     )
     cascade_text = (
-        " → ".join([f"C{target}" for target in row["cascade_targets"][:4]])
+        " -> ".join([signal_reference(target) for target in row["cascade_targets"][:4]])
         if row["cascade_targets"]
         else "No strong cascade target"
     )
@@ -2943,8 +3037,8 @@ def render_operational_impact_card(row, index):
         f'<span class="cx-icon-block">OP{index}</span>'
         f'<span class="cx-chip {badge_class}">{escape(row["impact_type"])}</span>'
         "</div>"
-        f'<p class="cx-eyebrow" style="margin-bottom:0.35rem;">Cluster {row["cluster_id"]} · {escape(row["priority"])}</p>'
-        f"<h4>{escape(row['theme'])}</h4>"
+        f'<p class="cx-eyebrow" style="margin-bottom:0.35rem;">{escape(row["signal_id"])} · {escape(row["priority"])}</p>'
+        f"<h4>{escape(row['signal_name'])}</h4>"
         f"<p>{escape(row['key_insight'])}</p>"
         '<div class="cx-action-meta">'
         f'<div><span>Impact</span><strong>{row["impact_score"]:.3f}</strong></div>'
@@ -2989,26 +3083,26 @@ def render_operational_command_cards(rows):
     cards = [
         (
             "Highest Risk",
-            f"C{risk['cluster_id']}: {risk['theme']}",
+            f"{risk['signal_id']}: {risk['signal_name']}",
             f"{risk['priority']} · {risk['negative_rate']:.0%} negative · impact {risk['impact_score']:.2f}",
             "#dc2626",
         ),
         (
             "Recovery Opportunity",
-            f"C{recovery['cluster_id']}: {recovery['theme']}",
+            f"{recovery['signal_id']}: {recovery['signal_name']}",
             f"Focus service recovery where negative feedback is most concentrated.",
             "#d97706",
         ),
         (
             "Most Connected",
-            f"C{connected['cluster_id']}: {connected['theme']}",
-            f"{connected['cascade_count']} connected cluster target(s).",
+            f"{connected['signal_id']}: {connected['signal_name']}",
+            f"{connected['cascade_count']} connected signal target(s).",
             "#2563eb",
         ),
         (
             "Best Quick Win",
             (
-                f"C{quick_win['cluster_id']}: {quick_win['theme']}"
+                f"{quick_win['signal_id']}: {quick_win['signal_name']}"
                 if quick_win
                 else "No clear quick win"
             ),
@@ -3050,15 +3144,15 @@ def render_operational_priority_queue(rows):
 
     for index, row in enumerate(rows[:7], 1):
         cascade_text = (
-            ", ".join([f"C{target}" for target in row["cascade_targets"][:4]])
+            ", ".join([signal_reference(target) for target in row["cascade_targets"][:4]])
             if row["cascade_targets"]
-            else "No strong connected cluster"
+            else "No strong connected signal"
         )
         st.markdown(
             '<div class="cx-priority-row">'
             f'<div><span class="cx-rank-pill">{index}</span></div>'
             "<div>"
-            f"<h4>C{row['cluster_id']}: {escape(row['theme'])}</h4>"
+            f"<h4>{escape(row['signal_id'])}: {escape(row['signal_name'])}</h4>"
             f'<span class="cx-chip {priority_class(row["priority"])}">{escape(row["priority"])}</span>'
             f'<p style="margin-top:0.45rem;">{escape(row["impact_type"])} · {row["action_window"]}</p>'
             "</div>"
@@ -3105,7 +3199,7 @@ def render_operational_impact_charts(rows):
             x=[row["negative_rate"] for row in rows],
             y=[row["cascade_count"] for row in rows],
             mode="markers+text",
-            text=[f"C{row['cluster_id']}" for row in rows],
+            text=[row["signal_id"] for row in rows],
             textposition="top center",
             marker=dict(
                 size=[18 + row["impact_score"] * 28 for row in rows],
@@ -3116,7 +3210,7 @@ def render_operational_impact_charts(rows):
                 line=dict(color="#ffffff", width=1.2),
             ),
             hovertext=[
-                f"{row['theme']}<br>{row['priority']}<br>{row['recommended_action']}"
+                f"{row['signal_name']}<br>{row['priority']}<br>{row['recommended_action']}"
                 for row in rows
             ],
             hovertemplate=(
@@ -3188,7 +3282,7 @@ def render_operational_impact_charts(rows):
         data=[
             go.Bar(
                 x=[row["impact_score"] for row in top_rows],
-                y=[f"C{row['cluster_id']}: {row['theme']}" for row in top_rows],
+                y=[f"{row['signal_id']}: {row['signal_name']}" for row in top_rows],
                 orientation="h",
                 marker=dict(
                     color=[
@@ -3232,10 +3326,10 @@ def render_ripple_summary(rows):
         return
 
     for row in connected_rows[:4]:
-        target_text = ", ".join([f"Cluster {target}" for target in row["cascade_targets"][:4]])
+        target_text = ", ".join([signal_reference(target) for target in row["cascade_targets"][:4]])
         st.markdown(
             '<div class="cx-impact-path">'
-            f'<strong style="color:var(--cx-ink);">Cluster {row["cluster_id"]}: {escape(row["theme"])}</strong><br>'
+            f'<strong style="color:var(--cx-ink);">{escape(row["signal_id"])}: {escape(row["signal_name"])}</strong><br>'
             f"Fixing this issue may also affect {escape(target_text)}. "
             f"Recommended move: {escape(shorten_text(row['recommended_action'], 170))}"
             "</div>",
@@ -3262,7 +3356,7 @@ def render_operational_action_plan(rows):
                 for row in items:
                     item_html += (
                         '<div class="cx-action-group-item">'
-                        f'<strong>C{row["cluster_id"]}: {escape(row["theme"])}</strong>'
+                        f'<strong>{escape(row["signal_id"])}: {escape(row["signal_name"])}</strong>'
                         f'<p>{escape(shorten_text(row["recommended_action"], 150))}</p>'
                         "</div>"
                     )
@@ -3289,8 +3383,8 @@ def build_intervention_projection(selected_cluster_id, action_insights, causal_e
     direct_reduction = improvement_pct / 100
     rows.append(
         {
-            "Cluster": f"C{selected_insight.cluster_id}",
-            "Theme": selected_insight.issue_theme.title(),
+            "Signal": signal_reference(selected_insight.cluster_id),
+            "Theme": insight_display_name(selected_insight),
             "Impact Path": "Direct issue",
             "Current Negative Rate": direct_negative,
             "Projected Negative Rate": max(0, direct_negative * (1 - direct_reduction)),
@@ -3314,8 +3408,8 @@ def build_intervention_projection(selected_cluster_id, action_insights, causal_e
         projected_negative = max(0, current_negative * (1 - cascade_reduction))
         rows.append(
             {
-                "Cluster": f"C{target_cluster}",
-                "Theme": target_insight.issue_theme.title(),
+                "Signal": signal_reference(target_cluster),
+                "Theme": insight_display_name(target_insight),
                 "Impact Path": "Related cascade",
                 "Current Negative Rate": current_negative,
                 "Projected Negative Rate": projected_negative,
@@ -3323,7 +3417,7 @@ def build_intervention_projection(selected_cluster_id, action_insights, causal_e
                 "Likelihood": likelihood,
                 "Why It Changes": cascade.get(
                     "cascade_interpretation",
-                    f"Cluster {target_cluster} shares service factors with Cluster {selected_cluster_id}.",
+                    f"{signal_reference(target_cluster)} shares service factors with {signal_reference(selected_cluster_id)}.",
                 ),
                 "Recommended Action": target_insight.recommended_action,
             }
@@ -3339,7 +3433,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
         unsafe_allow_html=True,
     )
     st.caption(
-        "Model a practical scenario: if one customer problem improves, which connected clusters may benefit next?"
+        "Model a practical scenario: if one customer problem improves, which connected signals may benefit next?"
     )
 
     if not action_insights:
@@ -3352,8 +3446,8 @@ def render_change_impact_simulator(action_insights, causal_engine):
             "Problem to improve",
             [insight.cluster_id for insight in action_insights],
             format_func=lambda cluster_id: (
-                f"Cluster {cluster_id}: "
-                f"{next(item.issue_theme.title() for item in action_insights if item.cluster_id == cluster_id)}"
+                f"{signal_reference(cluster_id)} · "
+                f"{next(insight_display_name(item) for item in action_insights if item.cluster_id == cluster_id)}"
             ),
             key="operational_change_simulator_cluster",
         )
@@ -3386,13 +3480,13 @@ def render_change_impact_simulator(action_insights, causal_engine):
     with metric_cols[0]:
         render_kpi_card(
             "Selected Problem",
-            f"C{selected_cluster_id}",
-            selected_insight.issue_theme.title(),
+            signal_reference(selected_cluster_id),
+            insight_display_name(selected_insight),
             "#3b82f6",
         )
     with metric_cols[1]:
         render_kpi_card(
-            "Connected Clusters",
+            "Connected Signals",
             connected_count,
             "Likely downstream effects",
             "#06b6d4",
@@ -3401,7 +3495,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
         render_kpi_card(
             "Total Negative Shift",
             f"{projected_total_change:.0%}",
-            "Across modeled clusters",
+            "Across modeled signals",
             "#10b981",
         )
 
@@ -3411,7 +3505,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
         '<span class="cx-icon-block">IF</span>'
         f'<span class="cx-chip {priority_class(selected_insight.priority_label)}">{escape(selected_insight.priority_label)}</span>'
         "</div>"
-        f"<h4>If Cluster {selected_cluster_id}: {escape(selected_insight.issue_theme.title())} improves by {improvement_pct}%</h4>"
+        f"<h4>If {escape(insight_display_name(selected_insight, include_reference=True))} improves by {improvement_pct}%</h4>"
         f"<p>{escape(selected_insight.key_insight)}</p>"
         '<div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem; margin-top:0.75rem;">'
         f'<strong style="color:var(--cx-ink);">Manager move:</strong> {escape(selected_insight.recommended_action)}'
@@ -3424,7 +3518,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
-            x=chart_df["Cluster"],
+            x=chart_df["Signal"],
             y=chart_df["Current Negative Rate"],
             name="Current",
             marker_color="#ef4444",
@@ -3433,7 +3527,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
     )
     fig.add_trace(
         go.Bar(
-            x=chart_df["Cluster"],
+            x=chart_df["Signal"],
             y=chart_df["Projected Negative Rate"],
             name="Projected after change",
             marker_color="#10b981",
@@ -3443,7 +3537,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
     fig.update_layout(
         title="Before vs After Scenario",
         yaxis_title="Negative feedback rate",
-        xaxis_title="Affected cluster",
+        xaxis_title="Affected signal",
         yaxis_tickformat=".0%",
         barmode="group",
     )
@@ -3453,7 +3547,7 @@ def render_change_impact_simulator(action_insights, causal_engine):
     if highest_related is not None:
         st.markdown(
             '<div class="cx-impact-path">'
-            f'<strong style="color:var(--cx-ink);">Most likely related impact: {escape(highest_related["Cluster"])} - {escape(highest_related["Theme"])}</strong><br>'
+            f'<strong style="color:var(--cx-ink);">Most likely related impact: {escape(highest_related["Signal"])} - {escape(highest_related["Theme"])}</strong><br>'
             f'{escape(highest_related["Why It Changes"])}'
             "</div>",
             unsafe_allow_html=True,
@@ -3477,7 +3571,7 @@ def render_operational_impact(
 ):
     render_page_header(
         "Operational Impact",
-        "A manager-facing view of which experience issues are most likely to affect operations, cascade into other clusters, and require action.",
+        "A manager-facing view of which experience signals are most likely to affect operations, cascade into related signals, and require action.",
         "Operations",
     )
 
@@ -3486,10 +3580,11 @@ def render_operational_impact(
         {row["priority"] for row in impact_rows},
         key=lambda label: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(label.split()[0], 9),
     )
-    cluster_options = ["All"] + [
-        f"Cluster {row['cluster_id']}"
+    signal_label_map = {
+        row["signal_id"]: row["signal_name"]
         for row in sorted(impact_rows, key=lambda item: item["cluster_id"])
-    ]
+    }
+    cluster_options = ["All"] + list(signal_label_map.keys())
     theme_options = ["All"] + sorted({row["theme"] for row in impact_rows})
 
     focus_col, download_col = st.columns([3, 0.85])
@@ -3518,8 +3613,9 @@ def render_operational_impact(
             )
         with filter_col2:
             cluster_filter = st.selectbox(
-                "Cluster",
+                "Signal",
                 cluster_options,
+                format_func=lambda value: "All" if value == "All" else f"{value} · {signal_label_map[value]}",
                 key="operational_impact_cluster_filter",
             )
         with filter_col3:
@@ -3555,13 +3651,13 @@ def render_operational_impact(
 
     metric_cols = st.columns(4)
     with metric_cols[0]:
-        render_kpi_card("Impact Clusters", len(visible_rows), "After filters", "#3b82f6")
+        render_kpi_card("Impact Signals", len(visible_rows), "After filters", "#3b82f6")
     with metric_cols[1]:
         render_kpi_card("Systemic Risks", systemic_count, "Highest operational concern", "#dc2626")
     with metric_cols[2]:
         render_kpi_card("Cascade Targets", total_cascades, "Shared impact links", "#06b6d4")
     with metric_cols[3]:
-        render_kpi_card("Avg Negative Rate", f"{avg_negative:.0%}", "Visible clusters", "#d97706")
+        render_kpi_card("Avg Negative Rate", f"{avg_negative:.0%}", "Visible signals", "#d97706")
 
     render_operational_command_cards(visible_rows)
 
@@ -3573,7 +3669,7 @@ def render_operational_impact(
             f'<span class="cx-chip {priority_class(top_row["priority"])}">{escape(top_row["priority"])}</span>'
             "</div>"
             '<p class="cx-eyebrow" style="margin-bottom:0.35rem;">Highest operational impact</p>'
-            f'<h3 style="margin:0 0 0.5rem;">Cluster {top_row["cluster_id"]}: {escape(top_row["theme"])}</h3>'
+            f'<h3 style="margin:0 0 0.5rem;">{escape(top_row["signal_name"])} ({escape(top_row["signal_id"])})</h3>'
             f'<p style="margin:0 0 0.7rem;">{escape(top_row["key_insight"])}</p>'
             '<div class="cx-panel-soft" style="padding:0.8rem; border-radius:0.85rem;">'
             '<strong style="color:var(--cx-ink);">Action:</strong> '
@@ -3660,7 +3756,7 @@ def render_overview_coverage_cards(
             "CI",
             "Customer Signals",
             f"{at_risk_count} at risk",
-            f"{opportunity_count} opportunity clusters",
+            f"{opportunity_count} opportunity signals",
             "#3b82f6",
         ),
         (
@@ -3672,9 +3768,9 @@ def render_overview_coverage_cards(
         ),
         (
             "CA",
-            "Cluster Health",
+            "Signal Health",
             f"{red_count} distress zones",
-            f"{len(audit_engine.cluster_texts)} audited clusters",
+            f"{len(audit_engine.cluster_texts)} audited signals",
             "#f59e0b",
         ),
         (
@@ -3748,13 +3844,25 @@ def render_agent_decision_support(
         )
 
 
-def render_agent_chat(action_agent, action_insights):
+def render_agent_chat(action_agent, action_insights, ai_config=None):
+    chat_signature = (
+        "ai" if ai_config and ai_config.get("enabled") else "local",
+        ai_config.get("model") if ai_config else "local",
+        len(action_insights),
+    )
+    if st.session_state.get("cx_agent_messages_signature") != chat_signature:
+        st.session_state.pop("cx_agent_messages", None)
+        st.session_state.cx_agent_messages_signature = chat_signature
+
     if "cx_agent_messages" not in st.session_state:
         st.session_state.cx_agent_messages = [
             {
                 "role": "assistant",
-                "content": action_agent.answer_question(
-                    "summarize for leadership", action_insights
+                "content": answer_with_optional_ai(
+                    "summarize for leadership",
+                    action_agent,
+                    action_insights,
+                    ai_config,
                 ),
             }
         ]
@@ -3769,7 +3877,7 @@ def render_agent_chat(action_agent, action_insights):
         "What needs attention first?",
         "Show the evidence.",
         "Draft manager actions.",
-        "Which clusters should we monitor?",
+        "Which signals should we monitor?",
     ]
     for col, prompt in zip(prompt_cols, suggested_prompts):
         with col:
@@ -3780,7 +3888,12 @@ def render_agent_chat(action_agent, action_insights):
                 st.session_state.cx_agent_messages.append(
                     {
                         "role": "assistant",
-                        "content": action_agent.answer_question(prompt, action_insights),
+                        "content": answer_with_optional_ai(
+                            prompt,
+                            action_agent,
+                            action_insights,
+                            ai_config,
+                        ),
                     }
                 )
 
@@ -3789,13 +3902,18 @@ def render_agent_chat(action_agent, action_insights):
             st.write(message["content"])
 
     user_question = st.chat_input(
-        "Ask about priorities, cascades, actions, or a specific cluster..."
+        "Ask about priorities, cascades, actions, or a specific signal..."
     )
     if user_question:
         st.session_state.cx_agent_messages.append(
             {"role": "user", "content": user_question}
         )
-        answer = action_agent.answer_question(user_question, action_insights)
+        answer = answer_with_optional_ai(
+            user_question,
+            action_agent,
+            action_insights,
+            ai_config,
+        )
         st.session_state.cx_agent_messages.append(
             {"role": "assistant", "content": answer}
         )
@@ -3912,6 +4030,7 @@ def render_overview(
     top_agent_insight,
     high_priority_count,
     medium_priority_count,
+    ai_config=None,
 ):
     render_page_header(
         "PX-Intel Overview",
@@ -3929,7 +4048,7 @@ def render_overview(
         )
     with kpi_col2:
         render_kpi_card(
-            "Experience Clusters",
+            "Experience Signals",
             clustering_engine.optimal_n_clusters,
             "Auto-selected by M1",
             "#06b6d4",
@@ -3945,7 +4064,7 @@ def render_overview(
         render_kpi_card(
             "Medium Priority",
             medium_priority_count,
-            "Watchlist clusters",
+            "Watchlist signals",
             "#d97706",
         )
 
@@ -3964,7 +4083,7 @@ def render_overview(
         texts,
     )
     render_customer_action_dashboard(action_agent, action_insights)
-    render_agent_chat(action_agent, action_insights)
+    render_agent_chat(action_agent, action_insights, ai_config)
 
 
 def build_experience_map_figure(
@@ -4001,24 +4120,24 @@ def build_experience_map_figure(
         if landscape_lens == "Priority Heatmap" and insight is not None:
             color = priority_color_map.get(insight.priority_label, "#64748b")
             trace_name = (
-                f"{insight.priority_label} | C{cluster_id} | "
-                f"{insight.issue_theme.title()}"
+                f"{insight.priority_label} | {signal_reference(cluster_id)} | "
+                f"{insight_display_name(insight)}"
             )
         elif landscape_lens == "Sentiment Health":
             color = zone_color_map.get(zone, "#64748b")
             readable_zone = zone.replace("_", " ").title()
-            trace_name = f"C{cluster_id} | {readable_zone}"
+            trace_name = f"{signal_reference(cluster_id)} | {readable_zone}"
         else:
             color = cluster_palette[int(cluster_id) % len(cluster_palette)]
-            theme = insight.issue_theme.title() if insight else "Theme"
-            trace_name = f"C{cluster_id} | {theme}"
+            theme = insight_display_name(insight) if insight else "Theme"
+            trace_name = f"{signal_reference(cluster_id)} | {theme}"
 
         hover_text = []
         for text in np.array(texts)[mask]:
             feedback = escape(str(text)[:180])
             if insight is not None:
                 hover_text.append(
-                    f"<b>Cluster {cluster_id}</b><br>"
+                    f"<b>{escape(insight_display_name(insight, include_reference=True))}</b><br>"
                     f"Theme: {escape(insight.issue_theme.title())}<br>"
                     f"Priority: {escape(insight.priority_label)} "
                     f"({insight.priority_score:.3f})<br>"
@@ -4028,7 +4147,7 @@ def build_experience_map_figure(
                 )
             else:
                 hover_text.append(
-                    f"<b>Cluster {cluster_id}</b><br>"
+                    f"<b>{signal_reference(cluster_id)}</b><br>"
                     f"Negative: {sentiment_dist['NEGATIVE']:.1%}<br>"
                     f"Feedback: {feedback}"
                 )
@@ -4083,8 +4202,8 @@ def render_cluster_analysis(
     neutral_count = len(audit_engine.get_neutral_zones())
 
     render_page_header(
-        "Cluster Analysis",
-        "Inspect feedback clusters, sentiment zones, representative themes, and the audit output behind the PX-Intel intelligence layer.",
+        "Signal Analysis",
+        "Inspect feedback signals, sentiment zones, representative themes, and the audit output behind the PX-Intel intelligence layer.",
         "Model audit",
     )
 
@@ -4093,7 +4212,7 @@ def render_cluster_analysis(
         render_kpi_card("Feedback Entries", f"{len(texts):,}", "Mapped comments", "#3b82f6")
     with summary_col2:
         render_kpi_card(
-            "Experience Clusters",
+            "Experience Signals",
             clustering_engine.optimal_n_clusters,
             "M1 discovery output",
             "#06b6d4",
@@ -4104,7 +4223,7 @@ def render_cluster_analysis(
         render_kpi_card(
             "Top Priority",
             (
-                f"Cluster {top_agent_insight.cluster_id}"
+                insight_display_name(top_agent_insight)
                 if top_agent_insight is not None
                 else "None"
             ),
@@ -4136,16 +4255,16 @@ def render_cluster_analysis(
 
     with col2:
         st.markdown(
-            '<h4 class="cx-section-heading">Cluster Inspector</h4>',
+            '<h4 class="cx-section-heading">Signal Inspector</h4>',
             unsafe_allow_html=True,
         )
         if action_insights:
             selected_map_cluster = st.selectbox(
-                "Choose a cluster",
+                "Choose a signal",
                 [item.cluster_id for item in action_insights],
                 format_func=lambda cid: (
-                    f"Cluster {cid}: "
-                    f"{insight_by_cluster[cid].issue_theme.title()} "
+                    f"{signal_reference(cid)} · "
+                    f"{insight_display_name(insight_by_cluster[cid])} "
                     f"({insight_by_cluster[cid].priority_label})"
                 ),
                 key="cluster_analysis_selected_cluster",
@@ -4154,7 +4273,7 @@ def render_cluster_analysis(
             st.markdown(
                 '<div class="cx-graph-detail">'
                 '<span class="cx-graph-type">AI Interpretation</span>'
-                f"<h4>Cluster {selected_map_cluster}: {escape(selected_insight.issue_theme.title())}</h4>"
+                f"<h4>{escape(insight_display_name(selected_insight, include_reference=True))}</h4>"
                 f"<p>{escape(selected_insight.key_insight)}</p>"
                 '<div class="cx-panel-soft" style="padding:0.75rem; border-radius:0.85rem; margin-top:0.75rem;">'
                 f'<strong style="color:var(--cx-ink);">Action:</strong> {escape(selected_insight.recommended_action)}'
@@ -4166,7 +4285,7 @@ def render_cluster_analysis(
                 unsafe_allow_html=True,
             )
         else:
-            st.info("No cluster insights are available yet.")
+            st.info("No signal insights are available yet.")
 
         st.markdown(
             '<h4 class="cx-section-heading">Sentiment Health</h4>',
@@ -4183,11 +4302,15 @@ def render_cluster_analysis(
             unsafe_allow_html=True,
         )
 
-    st.markdown('<h4 class="cx-section-heading">Cluster Auditing Results</h4>', unsafe_allow_html=True)
+    st.markdown('<h4 class="cx-section-heading">Signal Auditing Results</h4>', unsafe_allow_html=True)
     selected_cluster = st.selectbox(
-        "Select cluster",
+        "Select signal",
         sorted(audit_engine.cluster_texts.keys()),
-        format_func=lambda x: f"Cluster {x} ({audit_engine.cluster_zones[x]['zone_type']})",
+        format_func=lambda x: (
+            f"{signal_reference(x)} · "
+            f"{insight_display_name(insight_by_cluster[x]) if x in insight_by_cluster else 'Unlabeled Signal'} "
+            f"({audit_engine.cluster_zones[x]['zone_type']})"
+        ),
         key="cluster_analysis_audit_cluster",
     )
 
@@ -4196,8 +4319,8 @@ def render_cluster_analysis(
 
     audit_df = audit_engine.export_to_dataframe()
     render_table_section(
-        "All Clusters Audit Summary",
-        "Cluster-level sentiment, zone, vocabulary, and audit fields for deeper review.",
+        "All Signals Audit Summary",
+        "Signal-level sentiment, zone, vocabulary, and audit fields for deeper review.",
         audit_df,
         "No cluster audit rows are available yet.",
         accent_label="Audit table",
@@ -4249,9 +4372,9 @@ def build_written_report(
             [
                 (
                     f"PX-Intel reviewed {len(texts):,} feedback entries and identified "
-                    f"{clustering_engine.optimal_n_clusters} experience clusters. "
-                    f"The strongest current signal is Cluster {top_insight.cluster_id}: "
-                    f"{top_insight.issue_theme.title()}, marked {top_insight.priority_label}."
+                    f"{clustering_engine.optimal_n_clusters} experience signals. "
+                    f"The strongest current signal is {insight_display_name(top_insight, include_reference=True)}, "
+                    f"marked {top_insight.priority_label}."
                 ),
                 "",
                 f"Recommended first move: {top_insight.recommended_action}",
@@ -4271,9 +4394,9 @@ def build_written_report(
             "## Current Signal Summary",
             "",
             f"- Feedback entries reviewed: {len(texts):,}",
-            f"- Experience clusters: {clustering_engine.optimal_n_clusters}",
-            f"- High-priority clusters: {len(high_priority)}",
-            f"- Medium-priority clusters: {len(medium_priority)}",
+            f"- Experience signals: {clustering_engine.optimal_n_clusters}",
+            f"- High-priority signals: {len(high_priority)}",
+            f"- Medium-priority signals: {len(medium_priority)}",
             f"- At-risk customer signals: {len(risk_rows)}",
             f"- Opportunity signals: {len(opportunity_rows)}",
             f"- Systemic operational risks: {len(systemic_rows)}",
@@ -4285,7 +4408,7 @@ def build_written_report(
     for index, insight in enumerate(action_insights[:5], start=1):
         lines.extend(
             [
-                f"{index}. Cluster {insight.cluster_id}: {insight.issue_theme.title()} ({insight.priority_label})",
+                f"{index}. {insight_display_name(insight, include_reference=True)} ({insight.priority_label})",
                 f"   - Insight: {insight.key_insight}",
                 f"   - Root cause: {insight.root_cause}",
                 f"   - Action: {insight.recommended_action}",
@@ -4299,16 +4422,16 @@ def build_written_report(
         lines.extend(["## Operational Action Plan", ""])
         for row in impact_rows[:5]:
             cascade_text = (
-                ", ".join([f"C{target}" for target in row["cascade_targets"]])
+                ", ".join([signal_reference(target) for target in row["cascade_targets"]])
                 if row["cascade_targets"]
                 else "No strong related cascade"
             )
             lines.extend(
                 [
-                    f"- Cluster {row['cluster_id']}: {row['theme']}",
+                    f"- {row['signal_name']} ({row['signal_id']})",
                     f"  - Impact type: {row['impact_type']}",
                     f"  - Action window: {row['action_window']}",
-                    f"  - Related clusters: {cascade_text}",
+                    f"  - Related signals: {cascade_text}",
                     f"  - Recommended action: {row['recommended_action']}",
                 ]
             )
@@ -4318,7 +4441,7 @@ def build_written_report(
         for insight in risk_rows[:4]:
             lines.extend(
                 [
-                    f"- Risk signal C{insight.cluster_id}: {insight.issue_theme.title()}",
+                    f"- Risk signal {insight_display_name(insight, include_reference=True)}",
                     f"  - Negative rate: {insight.metadata.get('negative_rate', 0):.0%}",
                     f"  - Evidence: {shorten_text(insight.example_feedback, 180)}",
                 ]
@@ -4326,7 +4449,7 @@ def build_written_report(
         for insight in opportunity_rows[:3]:
             lines.extend(
                 [
-                    f"- Opportunity signal C{insight.cluster_id}: {insight.issue_theme.title()}",
+                    f"- Opportunity signal {insight_display_name(insight, include_reference=True)}",
                     f"  - Strength to protect: {insight.key_insight}",
                 ]
             )
@@ -4335,7 +4458,7 @@ def build_written_report(
         lines.extend(["## Leadership Recommendations", ""])
         for insight in action_insights[:3]:
             lines.append(
-                f"- Prioritize Cluster {insight.cluster_id} by taking this action: {insight.recommended_action}"
+                f"- Prioritize {insight_display_name(insight, include_reference=True)} by taking this action: {insight.recommended_action}"
             )
         lines.append("")
 
@@ -4346,9 +4469,9 @@ def build_written_report(
             break
     lines.extend(["## Cause And Effect Note", ""])
     if top_cascade:
-        related = ", ".join([f"Cluster {target}" for target in top_cascade["cascade_targets"][:3]])
+        related = ", ".join([signal_reference(target) for target in top_cascade["cascade_targets"][:3]])
         lines.append(
-            f"Changing Cluster {top_cascade['cluster_id']} ({top_cascade['theme']}) may also influence {related}. "
+            f"Changing {top_cascade['signal_name']} ({top_cascade['signal_id']}) may also influence {related}. "
             "Use the Operational Impact simulator to test different improvement levels before selecting a response plan."
         )
     else:
@@ -4361,8 +4484,8 @@ def build_written_report(
         [
             "## Next Steps",
             "",
-            "1. Assign an owner to the highest-priority cluster.",
-            "2. Use the Change Impact Simulator to test how fixing one issue may affect related clusters.",
+            "1. Assign an owner to the highest-priority signal.",
+            "2. Use the Change Impact Simulator to test how fixing one issue may affect related signals.",
             "3. Export the action, audit, and impact CSVs for deeper operational follow-up.",
             "4. Review the report after new feedback data is loaded.",
             "",
@@ -4377,6 +4500,7 @@ def render_written_report_generator(
     audit_engine,
     causal_engine,
     action_insights,
+    ai_config=None,
 ):
     st.markdown(
         '<h4 class="cx-section-heading">Written Report Builder</h4>',
@@ -4400,7 +4524,7 @@ def render_written_report_generator(
             key="written_report_audience",
         )
 
-    report_text = build_written_report(
+    base_report = build_written_report(
         report_type,
         audience,
         clustering_engine,
@@ -4409,6 +4533,48 @@ def render_written_report_generator(
         causal_engine,
         action_insights,
     )
+    report_text = base_report
+    report_signature = hashlib.sha256(
+        f"{report_type}|{audience}|{base_report}|{ai_config.get('model') if ai_config else ''}".encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+    if ai_config and ai_config.get("enabled"):
+        ai_col, note_col = st.columns([0.9, 2.1])
+        with ai_col:
+            write_ai_report = st.button(
+                "Write AI-enhanced report",
+                key="write_ai_enhanced_report",
+                width="stretch",
+            )
+        with note_col:
+            st.caption(
+                "Uses the existing PX-Intel metrics and evidence to sharpen the narrative. No new facts are invented."
+            )
+
+        if write_ai_report:
+            try:
+                enhancer = OpenAIInsightEnhancer(
+                    api_key=ai_config.get("api_key", ""),
+                    model=ai_config.get("model", "gpt-4o-mini"),
+                )
+                with st.spinner("Writing AI-enhanced report..."):
+                    report_text = enhancer.write_report(
+                        report_type,
+                        audience,
+                        base_report,
+                        action_insights,
+                    )
+                st.session_state.ai_written_report_signature = report_signature
+                st.session_state.ai_written_report_text = report_text
+            except AIEnhancementError as exc:
+                st.warning("AI report writing is unavailable, so the local report draft is shown.")
+                st.caption(str(exc)[:320])
+
+        if st.session_state.get("ai_written_report_signature") == report_signature:
+            report_text = st.session_state.get("ai_written_report_text", base_report)
+
     st.text_area(
         "Report draft",
         value=report_text,
@@ -4432,6 +4598,7 @@ def render_reports_export(
     causal_engine,
     action_agent,
     action_insights,
+    ai_config=None,
 ):
     render_page_header(
         "Reports & Export",
@@ -4481,6 +4648,7 @@ def render_reports_export(
         audit_engine,
         causal_engine,
         action_insights,
+        ai_config,
     )
 
     preview_col, summary_col = st.columns([1.45, 1])
@@ -4583,6 +4751,118 @@ def run_causal_reasoning(
     return causal_engine
 
 
+def build_ai_signature(action_insights, model):
+    """Build a stable signature so AI enhancement is not called on every rerun."""
+    payload = {
+        "model": model,
+        "signals": [
+            {
+                "cluster_id": insight.cluster_id,
+                "theme": insight.issue_theme,
+                "sentiment": insight.sentiment_label,
+                "priority": insight.priority_label,
+                "score": insight.priority_score,
+                "insight": insight.key_insight,
+                "action": insight.recommended_action,
+                "evidence": insight.example_feedback[:180],
+            }
+            for insight in action_insights
+        ],
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def collect_ai_updates(action_insights):
+    """Capture enhanced fields so they can be reused during Streamlit reruns."""
+    return {
+        str(insight.cluster_id): {
+            "professional_name": insight.professional_name,
+            "key_insight": insight.key_insight,
+            "root_cause": insight.root_cause,
+            "recommended_action": insight.recommended_action,
+            "ai_rationale": insight.ai_rationale,
+            "ai_enhanced": insight.ai_enhanced,
+        }
+        for insight in action_insights
+        if insight.ai_enhanced
+    }
+
+
+def apply_ai_updates(action_insights, updates):
+    """Apply cached AI language to freshly rebuilt action insights."""
+    for insight in action_insights:
+        update = updates.get(str(insight.cluster_id), {})
+        if not update:
+            continue
+        insight.professional_name = update.get("professional_name", insight.professional_name)
+        insight.key_insight = update.get("key_insight", insight.key_insight)
+        insight.root_cause = update.get("root_cause", insight.root_cause)
+        insight.recommended_action = update.get(
+            "recommended_action", insight.recommended_action
+        )
+        insight.ai_rationale = update.get("ai_rationale", insight.ai_rationale)
+        insight.ai_enhanced = bool(update.get("ai_enhanced", insight.ai_enhanced))
+    return action_insights
+
+
+def maybe_enhance_action_insights(action_insights, ai_config):
+    """Optionally improve manager-facing language with an OpenAI model."""
+    metadata = {"enabled": False, "summary": ""}
+    if not ai_config.get("enabled"):
+        return action_insights, metadata
+
+    signature = build_ai_signature(action_insights, ai_config.get("model"))
+    if ai_config.get("refresh_requested"):
+        st.session_state.pop("ai_enhancement_signature", None)
+        st.session_state.pop("ai_enhancement_updates", None)
+        st.session_state.pop("ai_enhancement_metadata", None)
+
+    if (
+        st.session_state.get("ai_enhancement_signature") == signature
+        and st.session_state.get("ai_enhancement_updates")
+    ):
+        action_insights = apply_ai_updates(
+            action_insights,
+            st.session_state.ai_enhancement_updates,
+        )
+        return action_insights, st.session_state.get(
+            "ai_enhancement_metadata",
+            {"enabled": True, "summary": "AI-enhanced language active."},
+        )
+
+    try:
+        enhancer = OpenAIInsightEnhancer(
+            api_key=ai_config.get("api_key", ""),
+            model=ai_config.get("model", "gpt-4o-mini"),
+        )
+        with st.spinner("Enhancing PX-Intel language with AI..."):
+            action_insights, metadata = enhancer.enhance_action_insights(action_insights)
+    except AIEnhancementError as exc:
+        st.warning("AI enhancement is unavailable, so PX-Intel is using local intelligence.")
+        st.caption(str(exc)[:320])
+        return action_insights, {"enabled": False, "summary": "", "error": str(exc)}
+
+    st.session_state.ai_enhancement_signature = signature
+    st.session_state.ai_enhancement_updates = collect_ai_updates(action_insights)
+    st.session_state.ai_enhancement_metadata = metadata
+    return action_insights, metadata
+
+
+def answer_with_optional_ai(question, action_agent, action_insights, ai_config):
+    """Use the AI enhancer for chat answers when available, otherwise fallback."""
+    if ai_config and ai_config.get("enabled"):
+        try:
+            enhancer = OpenAIInsightEnhancer(
+                api_key=ai_config.get("api_key", ""),
+                model=ai_config.get("model", "gpt-4o-mini"),
+            )
+            return enhancer.answer_question(question, action_insights)
+        except AIEnhancementError:
+            pass
+    return action_agent.answer_question(question, action_insights)
+
+
 # ============================================================================
 # Main Dashboard
 # ============================================================================
@@ -4590,7 +4870,7 @@ def run_causal_reasoning(
 
 def main():
     """Main dashboard flow."""
-    active_section, feedback_source = render_sidebar()
+    active_section, feedback_source, ai_config = render_sidebar()
     render_slogan_strip()
 
     # Load data and run clustering
@@ -4640,6 +4920,15 @@ def main():
         causal_engine=causal_engine,
         clustering_engine=clustering_engine,
     )
+    action_insights, ai_metadata = maybe_enhance_action_insights(
+        action_insights,
+        ai_config,
+    )
+    if ai_metadata.get("enabled") and ai_metadata.get("summary"):
+        st.caption(
+            f"AI-enhanced language active ({ai_metadata.get('model', ai_config.get('model'))}): "
+            f"{ai_metadata['summary']}"
+        )
 
     high_priority_count = sum(
         1 for insight in action_insights if insight.priority_label.startswith("HIGH")
@@ -4690,6 +4979,7 @@ def main():
             causal_engine,
             action_agent,
             action_insights,
+            ai_config,
         )
         return
 
@@ -4703,6 +4993,7 @@ def main():
         top_agent_insight,
         high_priority_count,
         medium_priority_count,
+        ai_config,
     )
     return
 

@@ -1201,7 +1201,13 @@ def read_openai_model_from_config():
     return str(secret_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")).strip()
 
 
-def build_ai_config(api_key, model, enabled, refresh_requested=False):
+def build_ai_config(
+    api_key,
+    model,
+    enabled,
+    refresh_requested=False,
+    generation_strength="Board-ready",
+):
     """Return normalized optional AI enhancement settings."""
     clean_key = str(api_key or "").strip()
     return {
@@ -1209,6 +1215,7 @@ def build_ai_config(api_key, model, enabled, refresh_requested=False):
         "api_key": clean_key,
         "model": str(model or "gpt-4o-mini").strip(),
         "refresh_requested": bool(refresh_requested),
+        "generation_strength": generation_strength,
     }
 
 
@@ -1384,6 +1391,12 @@ def render_sidebar():
                 value=configured_model,
                 key="openai_model_input",
             )
+            generation_strength = st.selectbox(
+                "Generation strength",
+                ["Board-ready", "Operational detail", "Brief"],
+                key="ai_generation_strength",
+                help="Controls how much structure and detail AI-generated answers and reports should produce.",
+            )
             ai_key = entered_key.strip() or configured_key
             ai_enabled = st.toggle(
                 "Use AI-enhanced language",
@@ -1407,6 +1420,7 @@ def render_sidebar():
             ai_model,
             ai_enabled,
             refresh_requested,
+            generation_strength,
         )
 
         st.markdown(
@@ -3977,10 +3991,46 @@ def render_agent_decision_support(
         )
 
 
-def render_agent_chat(action_agent, action_insights, ai_config=None):
+def render_agent_chat(
+    action_agent,
+    action_insights,
+    ai_config=None,
+    ai_context=None,
+):
+    st.markdown(
+        '<h4 class="cx-section-heading">Ask PX-Intel Agent</h4>',
+        unsafe_allow_html=True,
+    )
+    response_modes = [
+        "Decision brief",
+        "Evidence memo",
+        "Operational action plan",
+        "Root cause analysis",
+        "Customer recovery plan",
+        "Report section",
+    ]
+    mode_col, status_col = st.columns([1.1, 1.9])
+    with mode_col:
+        response_mode = st.selectbox(
+            "Agent output",
+            response_modes,
+            key="cx_agent_response_mode",
+        )
+    with status_col:
+        if ai_config and ai_config.get("enabled"):
+            st.caption(
+                f"AI generation active: {ai_config.get('model')} · {ai_config.get('generation_strength')}"
+            )
+        else:
+            st.caption(
+                "Local mode is active. Add an OpenAI key in the sidebar for full generated memos, plans, and report sections."
+            )
+
     chat_signature = (
         "ai" if ai_config and ai_config.get("enabled") else "local",
         ai_config.get("model") if ai_config else "local",
+        ai_config.get("generation_strength") if ai_config else "local",
+        response_mode,
         len(action_insights),
     )
     if st.session_state.get("cx_agent_messages_signature") != chat_signature:
@@ -3996,21 +4046,18 @@ def render_agent_chat(action_agent, action_insights, ai_config=None):
                     action_agent,
                     action_insights,
                     ai_config,
+                    ai_context,
+                    response_mode,
                 ),
             }
         ]
 
-    st.markdown(
-        '<h4 class="cx-section-heading">Ask PX-Intel Agent</h4>',
-        unsafe_allow_html=True,
-    )
-
     prompt_cols = st.columns(4)
     suggested_prompts = [
-        "What needs attention first?",
-        "Show the evidence.",
-        "Draft manager actions.",
-        "Which signals should we monitor?",
+        "Generate a decision brief.",
+        "Build a 30-day action plan.",
+        "Explain the root causes.",
+        "Draft a report section.",
     ]
     for col, prompt in zip(prompt_cols, suggested_prompts):
         with col:
@@ -4026,6 +4073,8 @@ def render_agent_chat(action_agent, action_insights, ai_config=None):
                             action_agent,
                             action_insights,
                             ai_config,
+                            ai_context,
+                            response_mode,
                         ),
                     }
                 )
@@ -4046,6 +4095,8 @@ def render_agent_chat(action_agent, action_insights, ai_config=None):
             action_agent,
             action_insights,
             ai_config,
+            ai_context,
+            response_mode,
         )
         st.session_state.cx_agent_messages.append(
             {"role": "assistant", "content": answer}
@@ -4164,6 +4215,7 @@ def render_overview(
     high_priority_count,
     medium_priority_count,
     ai_config=None,
+    feedback_source=None,
 ):
     render_page_header(
         "PX-Intel Overview",
@@ -4216,7 +4268,17 @@ def render_overview(
         texts,
     )
     render_customer_action_dashboard(action_agent, action_insights)
-    render_agent_chat(action_agent, action_insights, ai_config)
+    agent_ai_context = build_report_ai_context(
+        "Agent Decision Support",
+        "Leadership",
+        ai_config.get("generation_strength", "Board-ready") if ai_config else "Brief",
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+        action_insights,
+    )
+    render_agent_chat(action_agent, action_insights, ai_config, agent_ai_context)
 
 
 def build_experience_map_figure(
@@ -4715,6 +4777,17 @@ def build_report_ai_context(
     action_insights,
 ):
     impact_rows = build_operational_impact_rows(action_insights, causal_engine)
+    risk_count = sum(
+        1 for insight in action_insights if customer_lens_for_insight(insight) == "At Risk"
+    )
+    opportunity_count = sum(
+        1
+        for insight in action_insights
+        if customer_lens_for_insight(insight) == "Opportunity"
+    )
+    systemic_count = sum(
+        1 for row in impact_rows if row["impact_type"] == "Systemic Risk"
+    )
     return {
         "report_type": report_type,
         "audience": audience,
@@ -4724,6 +4797,17 @@ def build_report_ai_context(
         else "Current dataset",
         "feedback_entries": len(texts),
         "experience_signals": clustering_engine.optimal_n_clusters,
+        "signal_counts": {
+            "at_risk": risk_count,
+            "opportunity": opportunity_count,
+            "systemic_operational_risk": systemic_count,
+        },
+        "generation_contract": [
+            "Ground every claim in the active PX-Intel data.",
+            "Convert signals into decisions, owners, actions, and success metrics.",
+            "Do not mention unavailable source columns or make up customer demographics.",
+            "Use professional signal names and PX-S identifiers.",
+        ],
         "top_signals": [
             {
                 "signal_id": signal_reference(insight.cluster_id),
@@ -4735,6 +4819,11 @@ def build_report_ai_context(
                 "evidence": insight.example_feedback,
                 "root_cause": insight.root_cause,
                 "recommended_action": insight.recommended_action,
+                "success_metric": (
+                    "Reduce negative feedback concentration"
+                    if insight.metadata.get("negative_rate", 0) >= 0.3
+                    else "Protect positive feedback pattern"
+                ),
             }
             for insight in action_insights[:8]
         ],
@@ -4824,13 +4913,13 @@ def render_written_report_generator(
         ai_col, note_col = st.columns([0.9, 2.1])
         with ai_col:
             write_ai_report = st.button(
-                "Write AI-enhanced report",
+                "Generate full AI report",
                 key="write_ai_enhanced_report",
                 width="stretch",
             )
         with note_col:
             st.caption(
-                "Uses the existing PX-Intel metrics and evidence to sharpen the narrative. No new facts are invented."
+                f"Generates a {ai_config.get('generation_strength', 'Board-ready').lower()} report from the active dataset, PX-Intel metrics, evidence, root causes, and operational impact."
             )
 
         if write_ai_report:
@@ -4838,6 +4927,10 @@ def render_written_report_generator(
                 enhancer = OpenAIInsightEnhancer(
                     api_key=ai_config.get("api_key", ""),
                     model=ai_config.get("model", "gpt-4o-mini"),
+                    generation_strength=ai_config.get(
+                        "generation_strength",
+                        report_depth,
+                    ),
                 )
                 with st.spinner("Writing AI-enhanced report..."):
                     report_text = enhancer.write_report(
@@ -4849,22 +4942,32 @@ def render_written_report_generator(
                     )
                 st.session_state.ai_written_report_signature = report_signature
                 st.session_state.ai_written_report_text = report_text
+                st.session_state.written_report_signature = report_signature
+                st.session_state.written_report_output_text = report_text
             except AIEnhancementError as exc:
                 st.warning("AI report writing is unavailable, so the local report draft is shown.")
                 st.caption(str(exc)[:320])
 
         if st.session_state.get("ai_written_report_signature") == report_signature:
             report_text = st.session_state.get("ai_written_report_text", base_report)
+    elif ai_config and not ai_config.get("enabled"):
+        st.caption(
+            "Enable AI enhancement in the sidebar to generate a stronger report from this evidence base."
+        )
+
+    if st.session_state.get("written_report_signature") != report_signature:
+        st.session_state.written_report_signature = report_signature
+        st.session_state.written_report_output_text = report_text
 
     st.text_area(
         "Report draft",
-        value=report_text,
         height=420,
-        key="written_report_output",
+        key="written_report_output_text",
     )
+    final_report_text = st.session_state.get("written_report_output_text", report_text)
     st.download_button(
         "Download written report",
-        data=report_text,
+        data=final_report_text,
         file_name="px_intel_written_report.md",
         mime="text/markdown",
         width="stretch",
@@ -5095,7 +5198,10 @@ def maybe_enhance_action_insights(action_insights, ai_config):
     if not ai_config.get("enabled"):
         return action_insights, metadata
 
-    signature = build_ai_signature(action_insights, ai_config.get("model"))
+    signature = build_ai_signature(
+        action_insights,
+        f"{ai_config.get('model')}|{ai_config.get('generation_strength')}",
+    )
     if ai_config.get("refresh_requested"):
         st.session_state.pop("ai_enhancement_signature", None)
         st.session_state.pop("ai_enhancement_updates", None)
@@ -5118,6 +5224,7 @@ def maybe_enhance_action_insights(action_insights, ai_config):
         enhancer = OpenAIInsightEnhancer(
             api_key=ai_config.get("api_key", ""),
             model=ai_config.get("model", "gpt-4o-mini"),
+            generation_strength=ai_config.get("generation_strength", "Board-ready"),
         )
         with st.spinner("Enhancing PX-Intel language with AI..."):
             action_insights, metadata = enhancer.enhance_action_insights(action_insights)
@@ -5132,15 +5239,31 @@ def maybe_enhance_action_insights(action_insights, ai_config):
     return action_insights, metadata
 
 
-def answer_with_optional_ai(question, action_agent, action_insights, ai_config):
+def answer_with_optional_ai(
+    question,
+    action_agent,
+    action_insights,
+    ai_config,
+    ai_context=None,
+    response_mode="Decision brief",
+):
     """Use the AI enhancer for chat answers when available, otherwise fallback."""
     if ai_config and ai_config.get("enabled"):
         try:
             enhancer = OpenAIInsightEnhancer(
                 api_key=ai_config.get("api_key", ""),
                 model=ai_config.get("model", "gpt-4o-mini"),
+                generation_strength=ai_config.get(
+                    "generation_strength",
+                    "Board-ready",
+                ),
             )
-            return enhancer.answer_question(question, action_insights)
+            return enhancer.answer_question(
+                question,
+                action_insights,
+                context=ai_context,
+                response_mode=response_mode,
+            )
         except AIEnhancementError:
             pass
     return action_agent.answer_question(question, action_insights)
@@ -5278,6 +5401,7 @@ def main():
         high_priority_count,
         medium_priority_count,
         ai_config,
+        feedback_source,
     )
     return
 

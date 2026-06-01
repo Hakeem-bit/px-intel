@@ -25,10 +25,17 @@ class AIEnhancementError(RuntimeError):
 class OpenAIInsightEnhancer:
     """Enhance PX-Intel outputs with an OpenAI model using the Responses API."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", timeout: int = 45):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        timeout: int = 45,
+        generation_strength: str = "Board-ready",
+    ):
         self.api_key = (api_key or "").strip()
         self.model = (model or "gpt-4o-mini").strip()
         self.timeout = timeout
+        self.generation_strength = generation_strength or "Board-ready"
 
     @property
     def enabled(self) -> bool:
@@ -106,6 +113,8 @@ class OpenAIInsightEnhancer:
         self,
         question: str,
         insights: List[ActionInsight],
+        context: Optional[Dict[str, Any]] = None,
+        response_mode: str = "Decision brief",
     ) -> str:
         """Answer an agent question using only current PX-Intel outputs."""
         if not self.enabled:
@@ -113,21 +122,30 @@ class OpenAIInsightEnhancer:
         if not insights:
             return "PX-Intel does not have enough processed insight data yet."
 
-        context = self._build_prompt_payload(insights[:8])
+        signal_context = self._build_prompt_payload(insights[:10])
         prompt = {
             "question": question,
-            "px_intel_context": context,
+            "response_mode": response_mode,
+            "generation_strength": self.generation_strength,
+            "px_intel_context": signal_context,
+            "dataset_context": context or {},
             "response_requirements": [
-                "Answer as a concise business intelligence assistant.",
+                "Answer as a business intelligence operator, not a chatbot.",
                 "Use only the provided PX-Intel context.",
                 "Reference professional signal names, not raw cluster labels.",
-                "Include evidence, metric reasoning, and concrete next actions.",
+                "Include evidence, metric reasoning, owner-ready next actions, and success measures.",
+                "If response_mode asks for a plan or memo, produce a complete artifact with headings.",
                 "If information is missing, say what is not available.",
+                *GENERATION_MODE_REQUIREMENTS.get(
+                    response_mode,
+                    GENERATION_MODE_REQUIREMENTS["Decision brief"],
+                ),
             ],
         }
         return self._call_openai(
             instructions=AI_AGENT_INSTRUCTIONS,
             prompt=json.dumps(prompt, ensure_ascii=False),
+            max_output_tokens=2200,
         ).strip()
 
     def write_report(
@@ -147,6 +165,7 @@ class OpenAIInsightEnhancer:
             "base_report": base_report,
             "report_context": report_context or {},
             "signals": self._build_prompt_payload(insights[:8]),
+            "generation_strength": self.generation_strength,
             "requirements": [
                 "Return a polished Markdown report.",
                 "Keep all numbers, priorities, and evidence grounded in the base report.",
@@ -155,11 +174,14 @@ class OpenAIInsightEnhancer:
                 "Make recommendations concrete, owner-oriented, and operational.",
                 "Include an executive readout, evidence-backed findings, operational playbook, risk/cascade implications, and next decisions.",
                 "Use the report depth and audience from report_context to tune the level of detail.",
+                "Write as if this is a serious deliverable for an operations leader.",
+                "Avoid generic filler; every paragraph should connect a metric, evidence point, or action.",
             ],
         }
         return self._call_openai(
             instructions=AI_REPORT_INSTRUCTIONS,
             prompt=json.dumps(prompt, ensure_ascii=False),
+            max_output_tokens=4200,
         ).strip()
 
     def _build_prompt_payload(self, insights: Iterable[ActionInsight]) -> Dict[str, Any]:
@@ -186,11 +208,17 @@ class OpenAIInsightEnhancer:
             ]
         }
 
-    def _call_openai(self, instructions: str, prompt: str) -> str:
+    def _call_openai(
+        self,
+        instructions: str,
+        prompt: str,
+        max_output_tokens: int = 1800,
+    ) -> str:
         body = {
             "model": self.model,
             "instructions": instructions,
             "input": prompt,
+            "max_output_tokens": max_output_tokens,
         }
         request = urllib.request.Request(
             OPENAI_RESPONSES_URL,
@@ -238,9 +266,11 @@ pipeline outputs without inventing facts. Return JSON only:
 """
 
 AI_AGENT_INSTRUCTIONS = """
-You are PX-Intel Agent. Answer with grounded business intelligence. Use only
-the provided metrics, signals, evidence, and recommended actions. Do not use
-raw cluster labels unless the user asks for technical IDs.
+You are PX-Intel Agent, a senior customer-experience intelligence analyst.
+Generate grounded decision artifacts from the active PX-Intel dataset. Use only
+the provided metrics, signals, evidence, recommended actions, and operational
+impact context. Do not use raw cluster labels unless the user asks for technical
+IDs. Be specific, operational, and evidence-backed.
 """
 
 AI_REPORT_INSTRUCTIONS = """
@@ -251,6 +281,34 @@ dataset: cite the strongest signals, quote or summarize evidence, explain why
 each recommendation follows from the metrics, and separate immediate actions
 from monitored risks. Return Markdown only.
 """
+
+
+GENERATION_MODE_REQUIREMENTS = {
+    "Decision brief": [
+        "Use sections: Decision, Why it matters, Evidence, Recommended moves, Success measures.",
+        "Keep the answer tight enough for a leadership huddle.",
+    ],
+    "Evidence memo": [
+        "Use sections: Signal evidence, Customer language, Metrics, Interpretation, Caveats.",
+        "Prioritize traceability from feedback evidence to recommendation.",
+    ],
+    "Operational action plan": [
+        "Use sections: 7-day actions, 30-day actions, Owners, Metrics, Risks to monitor.",
+        "Make the plan executable by a service operations team.",
+    ],
+    "Root cause analysis": [
+        "Use sections: Primary drivers, Cause/effect path, Supporting evidence, Tests to confirm, Fix sequence.",
+        "Separate confirmed evidence from plausible operational interpretation.",
+    ],
+    "Customer recovery plan": [
+        "Use sections: Affected customers, Recovery message, Service recovery actions, Follow-up cadence, Escalation triggers.",
+        "Focus on trust repair and reducing repeat friction.",
+    ],
+    "Report section": [
+        "Write a polished report-ready section with a clear title, evidence, implications, and actions.",
+        "Use Markdown suitable for insertion into the written report.",
+    ],
+}
 
 
 def _extract_response_text(data: Dict[str, Any]) -> str:

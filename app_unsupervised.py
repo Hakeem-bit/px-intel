@@ -344,6 +344,47 @@ def apply_app_theme():
                 var(--cx-panel);
         }
 
+        .cx-stakeholder-panel {
+            margin: 0.75rem 0 1.05rem;
+            padding: 1rem;
+            border: 1px solid var(--cx-border);
+            border-radius: var(--cx-radius);
+            background:
+                radial-gradient(circle at 92% 10%, rgba(6, 182, 212, 0.12), transparent 28%),
+                var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-stakeholder-panel h4 {
+            margin: 0.45rem 0 0.45rem;
+            color: var(--cx-ink);
+            font-size: 1.05rem;
+        }
+
+        .cx-stakeholder-panel p {
+            margin: 0;
+            color: var(--cx-muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .cx-stakeholder-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 0.75rem;
+        }
+
+        .cx-stakeholder-meta span {
+            display: inline-flex;
+            padding: 0.32rem 0.55rem;
+            border-radius: 999px;
+            background: var(--cx-panel-soft);
+            color: var(--cx-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
         .cx-icon-block {
             width: 42px;
             height: 42px;
@@ -1377,7 +1418,7 @@ def render_sidebar():
         configured_model = read_openai_model_from_config()
         with st.expander("AI enhancement", expanded=False):
             st.caption(
-                "Optional: use an OpenAI key to sharpen report language, agent answers, and signal naming."
+                "Optional: use an OpenAI key to sharpen signal naming, stakeholder explanations, reports, and agent answers."
             )
             entered_key = st.text_input(
                 "OpenAI API key",
@@ -1859,11 +1900,29 @@ def render_customer_intelligence_graphics(insights):
         st.plotly_chart(fig, width="stretch")
 
 
-def render_customer_intelligence(audit_engine, action_insights, texts):
+def render_customer_intelligence(
+    audit_engine,
+    action_insights,
+    texts,
+    ai_config=None,
+    feedback_source=None,
+    clustering_engine=None,
+    causal_engine=None,
+):
     render_page_header(
         "Customer Intelligence",
         "A business-facing view of customer segments, risk signals, opportunities, and source evidence from the existing PX-Intel pipeline.",
         "Customer view",
+    )
+    render_stakeholder_explanation(
+        "Customer Intelligence",
+        "customer segment risk, opportunity signals, and source evidence",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
     )
 
     red_count = len(audit_engine.get_red_zones())
@@ -2882,6 +2941,10 @@ def render_cause_effect_graph(
     action_insights,
     df,
     cluster_assignments,
+    ai_config=None,
+    feedback_source=None,
+    texts=None,
+    clustering_engine=None,
 ):
     render_page_header(
         "Cause & Effect Graph",
@@ -2889,6 +2952,16 @@ def render_cause_effect_graph(
         "Relationship map",
     )
     render_cause_effect_outline()
+    render_stakeholder_explanation(
+        "Cause & Effect Graph",
+        "cause-and-effect paths from feedback themes to issues, root causes, risk, impact, and actions",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+    )
 
     date_column = find_date_column(df)
     sentiment_options = ["All"] + sorted(
@@ -3715,11 +3788,25 @@ def render_change_impact_simulator(action_insights, causal_engine):
 def render_operational_impact(
     causal_engine,
     action_insights,
+    ai_config=None,
+    feedback_source=None,
+    texts=None,
+    clustering_engine=None,
 ):
     render_page_header(
         "Operational Impact",
         "A manager-facing view of which experience signals are most likely to affect operations, cascade into related signals, and require action.",
         "Operations",
+    )
+    render_stakeholder_explanation(
+        "Operational Impact",
+        "operational risk, cascade exposure, action timing, and change impact decisions",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
     )
 
     impact_rows = build_operational_impact_rows(action_insights, causal_engine)
@@ -4222,6 +4309,16 @@ def render_overview(
         "A focused command view for KPIs, action priorities, customer experience actions, and the PX-Intel agent.",
         "Overview",
     )
+    render_stakeholder_explanation(
+        "PX-Intel Overview",
+        "executive command view for priority signals, customer actions, and AI-assisted decisions",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+    )
 
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     with kpi_col1:
@@ -4387,6 +4484,9 @@ def render_cluster_analysis(
     action_agent,
     action_insights,
     top_agent_insight,
+    ai_config=None,
+    feedback_source=None,
+    causal_engine=None,
 ):
     insight_by_cluster = {item.cluster_id: item for item in action_insights}
     high_clusters = [
@@ -4400,6 +4500,16 @@ def render_cluster_analysis(
         "Signal Analysis",
         "Inspect feedback signals, sentiment zones, representative themes, and the audit output behind the PX-Intel intelligence layer.",
         "Model audit",
+    )
+    render_stakeholder_explanation(
+        "Signal Analysis",
+        "model audit, signal quality, sentiment zones, and source evidence inspection",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
     )
 
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
@@ -4844,6 +4954,296 @@ def build_report_ai_context(
     }
 
 
+def build_stakeholder_page_context(
+    page_name,
+    page_focus,
+    action_insights,
+    feedback_source=None,
+    texts=None,
+    clustering_engine=None,
+    causal_engine=None,
+    extra_context=None,
+):
+    """Build compact page context for AI and local stakeholder explanations."""
+    action_insights = list(action_insights or [])
+    feedback_entries = len(texts) if texts is not None else sum(
+        int(insight.metadata.get("cluster_size", 0) or 0)
+        for insight in action_insights
+    )
+    experience_signals = int(
+        getattr(clustering_engine, "optimal_n_clusters", len(action_insights))
+        or len(action_insights)
+    )
+    impact_rows = (
+        build_operational_impact_rows(action_insights, causal_engine)
+        if causal_engine is not None
+        else []
+    )
+    high_count = sum(
+        1 for insight in action_insights if insight.priority_label.startswith("HIGH")
+    )
+    medium_count = sum(
+        1 for insight in action_insights if insight.priority_label.startswith("MEDIUM")
+    )
+    risk_count = sum(
+        1 for insight in action_insights if customer_lens_for_insight(insight) == "At Risk"
+    )
+    opportunity_count = sum(
+        1
+        for insight in action_insights
+        if customer_lens_for_insight(insight) == "Opportunity"
+    )
+    systemic_count = sum(
+        1 for row in impact_rows if row["impact_type"] == "Systemic Risk"
+    )
+
+    return {
+        "page_name": page_name,
+        "page_focus": page_focus,
+        "active_data_source": feedback_source_label(feedback_source)
+        if feedback_source
+        else "Current dataset",
+        "feedback_entries": int(feedback_entries),
+        "experience_signals": experience_signals,
+        "priority_counts": {
+            "high": int(high_count),
+            "medium": int(medium_count),
+            "total": int(len(action_insights)),
+        },
+        "customer_signal_counts": {
+            "at_risk": int(risk_count),
+            "opportunity": int(opportunity_count),
+            "systemic_operational_risk": int(systemic_count),
+        },
+        "top_signals": [
+            {
+                "signal_id": signal_reference(insight.cluster_id),
+                "name": insight_display_name(insight),
+                "theme": insight.issue_theme.title(),
+                "priority": insight.priority_label,
+                "priority_score": float(insight.priority_score),
+                "negative_rate": float(insight.metadata.get("negative_rate", 0) or 0),
+                "feedback_volume": int(insight.metadata.get("cluster_size", 0) or 0),
+                "keywords": [str(keyword) for keyword in insight.keywords[:6]],
+                "insight": insight.key_insight,
+                "root_cause": insight.root_cause,
+                "recommended_action": insight.recommended_action,
+                "evidence": shorten_text(insight.example_feedback, 260),
+            }
+            for insight in action_insights[:6]
+        ],
+        "operational_impact": [
+            {
+                "signal_id": row["signal_id"],
+                "name": row["signal_name"],
+                "impact_type": row["impact_type"],
+                "action_window": row["action_window"],
+                "impact_score": round(float(row["impact_score"]), 3),
+                "cascade_targets": [
+                    signal_reference(target) for target in row["cascade_targets"]
+                ],
+                "recommended_action": row["recommended_action"],
+            }
+            for row in impact_rows[:6]
+        ],
+        "extra_context": extra_context or {},
+    }
+
+
+def build_stakeholder_summary(context):
+    top_signals = context.get("top_signals", [])
+    if not top_signals:
+        return (
+            f"{context['page_name']} is ready to explain the current PX-Intel view, "
+            "but the active dataset has not produced enough action signals yet."
+        )
+
+    top_signal = top_signals[0]
+    return (
+        f"{context['page_name']} summarizes {context['feedback_entries']:,} feedback "
+        f"entries from {context['active_data_source']} into "
+        f"{context['experience_signals']} experience signals. The leading signal is "
+        f"{top_signal['name']} ({top_signal['signal_id']}), marked "
+        f"{top_signal['priority']} with {top_signal['negative_rate']:.0%} negative "
+        "concentration, so stakeholders can connect evidence to the next decision."
+    )
+
+
+def build_local_stakeholder_brief(context):
+    top_signals = context.get("top_signals", [])
+    impact_rows = context.get("operational_impact", [])
+    counts = context.get("priority_counts", {})
+    customer_counts = context.get("customer_signal_counts", {})
+
+    lines = [
+        "#### What this view shows",
+        "",
+        (
+            f"This page explains **{context['page_focus']}** using the active PX-Intel "
+            f"dataset: **{context['active_data_source']}**. The current analysis covers "
+            f"**{context['feedback_entries']:,} feedback entries**, "
+            f"**{context['experience_signals']} experience signals**, "
+            f"**{counts.get('high', 0)} high-priority signals**, and "
+            f"**{counts.get('medium', 0)} medium-priority signals**."
+        ),
+        "",
+        "#### What stakeholders should notice",
+        "",
+    ]
+
+    if top_signals:
+        for signal in top_signals[:3]:
+            lines.append(
+                (
+                    f"- **{signal['name']} ({signal['signal_id']})** is "
+                    f"{signal['priority']} with {signal['feedback_volume']:,} related "
+                    f"comments and {signal['negative_rate']:.0%} negative concentration. "
+                    f"Recommended move: {signal['recommended_action']}"
+                )
+            )
+    else:
+        lines.append("- No stakeholder-ready signals are available for this page yet.")
+
+    lines.extend(
+        [
+            "",
+            "#### Decisions this supports",
+            "",
+            (
+                f"- Prioritize service recovery for the "
+                f"**{customer_counts.get('at_risk', 0)} at-risk** customer signals."
+            ),
+            (
+                f"- Protect and scale the "
+                f"**{customer_counts.get('opportunity', 0)} opportunity** signals that "
+                "show stronger customer experience patterns."
+            ),
+        ]
+    )
+
+    if impact_rows:
+        lead_impact = impact_rows[0]
+        lines.append(
+            (
+                f"- Treat **{lead_impact['name']} ({lead_impact['signal_id']})** as the "
+                f"lead operational watch item because it is categorized as "
+                f"**{lead_impact['impact_type']}** with an **{lead_impact['action_window']}** action window."
+            )
+        )
+
+    lines.extend(
+        [
+            "",
+            "#### Recommended next move",
+            "",
+            (
+                "Use this page to move from feedback discovery into a documented decision: "
+                "confirm the evidence, assign an owner, choose the first action, and define "
+                "the success metric PX-Intel should monitor after the change."
+            ),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_stakeholder_explanation(
+    page_name,
+    page_focus,
+    action_insights,
+    ai_config=None,
+    feedback_source=None,
+    texts=None,
+    clustering_engine=None,
+    causal_engine=None,
+    extra_context=None,
+):
+    """Render a stakeholder-ready page explanation with optional OpenAI output."""
+    context = build_stakeholder_page_context(
+        page_name,
+        page_focus,
+        action_insights,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+        extra_context,
+    )
+    local_summary = build_stakeholder_summary(context)
+    local_brief = build_local_stakeholder_brief(context)
+    signature_payload = {
+        "page_name": page_name,
+        "model": ai_config.get("model") if ai_config else "local",
+        "generation_strength": ai_config.get("generation_strength") if ai_config else "local",
+        "context": context,
+    }
+    signature = hashlib.sha256(
+        json.dumps(signature_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+    brief_cache = st.session_state.setdefault("stakeholder_ai_briefs", {})
+    error_cache = st.session_state.setdefault("stakeholder_ai_errors", {})
+    if ai_config and ai_config.get("refresh_requested"):
+        brief_cache.pop(signature, None)
+        error_cache.pop(signature, None)
+
+    ai_brief = brief_cache.get(signature)
+    ai_error = error_cache.get(signature)
+    if ai_config and ai_config.get("enabled") and not ai_brief and not ai_error:
+        try:
+            enhancer = OpenAIInsightEnhancer(
+                api_key=ai_config.get("api_key", ""),
+                model=ai_config.get("model", "gpt-4o-mini"),
+                generation_strength=ai_config.get(
+                    "generation_strength",
+                    "Board-ready",
+                ),
+            )
+            with st.spinner(f"Writing {page_name} stakeholder explanation..."):
+                ai_brief = enhancer.explain_page(page_name, page_focus, context)
+            brief_cache[signature] = ai_brief
+        except AIEnhancementError as exc:
+            ai_error = str(exc)
+            error_cache[signature] = ai_error
+
+    source_label = "AI-generated stakeholder brief" if ai_brief else "Local PX-Intel stakeholder brief"
+    model_label = (
+        ai_config.get("model", "OpenAI") if ai_config and ai_config.get("enabled") else "Local pipeline"
+    )
+    st.markdown(
+        f"""
+        <div class="cx-stakeholder-panel">
+            <div class="cx-card-topline" style="margin-bottom:0.35rem;">
+                <span class="cx-icon-block">AI</span>
+                <span class="cx-chip">Stakeholder ready</span>
+            </div>
+            <div class="cx-eyebrow">{escape(source_label)}</div>
+            <h4>{escape(page_name)} Explanation</h4>
+            <p>{escape(local_summary)}</p>
+            <div class="cx-stakeholder-meta">
+                <span>{escape(context['active_data_source'])}</span>
+                <span>{context['feedback_entries']:,} feedback entries</span>
+                <span>{context['experience_signals']} experience signals</span>
+                <span>{escape(model_label)}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if ai_error:
+        st.caption(
+            "AI stakeholder explanation is unavailable for this page, so PX-Intel is showing the local grounded readout."
+        )
+        st.caption(ai_error[:320])
+    elif ai_config and not ai_config.get("enabled"):
+        st.caption(
+            "Enable AI enhancement in the sidebar to have OpenAI write this page explanation from the active PX-Intel evidence."
+        )
+
+    with st.expander("Stakeholder readout", expanded=True):
+        st.markdown(ai_brief or local_brief)
+
+
 def render_written_report_generator(
     clustering_engine,
     texts,
@@ -4989,6 +5389,16 @@ def render_reports_export(
         "Reports & Export",
         "Download PX-Intel outputs and review the key data products generated by clustering, auditing, causal reasoning, and action intelligence.",
         "Exports",
+    )
+    render_stakeholder_explanation(
+        "Reports & Export",
+        "report drafting, evidence review, data export, and stakeholder documentation",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
     )
 
     export_df = clustering_engine.export_to_dataframe(texts, df)
@@ -5347,7 +5757,15 @@ def main():
     top_agent_insight = action_insights[0] if action_insights else None
 
     if active_section == "Customer Intelligence":
-        render_customer_intelligence(audit_engine, action_insights, texts)
+        render_customer_intelligence(
+            audit_engine,
+            action_insights,
+            texts,
+            ai_config,
+            feedback_source,
+            clustering_engine,
+            causal_engine,
+        )
         return
 
     if active_section == "Cause & Effect Graph":
@@ -5357,11 +5775,22 @@ def main():
             action_insights,
             df,
             cluster_assignments,
+            ai_config,
+            feedback_source,
+            texts,
+            clustering_engine,
         )
         return
 
     if active_section == "Operational Impact":
-        render_operational_impact(causal_engine, action_insights)
+        render_operational_impact(
+            causal_engine,
+            action_insights,
+            ai_config,
+            feedback_source,
+            texts,
+            clustering_engine,
+        )
         return
 
     if active_section == "Cluster Analysis":
@@ -5373,6 +5802,9 @@ def main():
             action_agent,
             action_insights,
             top_agent_insight,
+            ai_config,
+            feedback_source,
+            causal_engine,
         )
         return
 

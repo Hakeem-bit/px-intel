@@ -184,6 +184,37 @@ class OpenAIInsightEnhancer:
             max_output_tokens=4200,
         ).strip()
 
+    def explain_page(
+        self,
+        page_name: str,
+        page_focus: str,
+        page_context: Dict[str, Any],
+    ) -> str:
+        """Generate a stakeholder explanation for a PX-Intel workspace page."""
+        if not self.enabled:
+            raise AIEnhancementError("No OpenAI API key is configured.")
+
+        prompt = {
+            "page_name": page_name,
+            "page_focus": page_focus,
+            "generation_strength": self.generation_strength,
+            "page_context": page_context,
+            "requirements": [
+                "Use only the provided PX-Intel page context.",
+                "Write for business, operations, and customer-experience stakeholders.",
+                "Explain what the page shows, why it matters, and what decisions it supports.",
+                "Reference professional signal names and PX-S identifiers, not generic cluster labels.",
+                "Connect metrics, evidence, risks, opportunities, root causes, and recommended actions.",
+                "Do not invent unavailable customer demographics, revenue impact, or source columns.",
+                "Keep the language specific, concise, and ready to present in a stakeholder meeting.",
+            ],
+        }
+        return self._call_openai(
+            instructions=AI_PAGE_EXPLANATION_INSTRUCTIONS,
+            prompt=json.dumps(prompt, ensure_ascii=False),
+            max_output_tokens=1900,
+        ).strip()
+
     def _build_prompt_payload(self, insights: Iterable[ActionInsight]) -> Dict[str, Any]:
         return {
             "signals": [
@@ -280,6 +311,15 @@ consulting language. The report should feel like it learned from the active
 dataset: cite the strongest signals, quote or summarize evidence, explain why
 each recommendation follows from the metrics, and separate immediate actions
 from monitored risks. Return Markdown only.
+"""
+
+AI_PAGE_EXPLANATION_INSTRUCTIONS = """
+You write stakeholder-ready explanations inside PX-Intel, a customer feedback
+intelligence platform. Convert the active page context into a clear Markdown
+brief with these sections: What this view shows, What stakeholders should
+notice, Decisions this supports, and Recommended next move. Every statement
+must be grounded in the provided metrics, signals, evidence, and actions. Avoid
+generic filler, avoid raw cluster labels, and do not invent facts.
 """
 
 

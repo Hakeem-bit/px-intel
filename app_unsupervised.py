@@ -385,6 +385,76 @@ def apply_app_theme():
             font-weight: 800;
         }
 
+        .cx-alert-band {
+            margin: 0.9rem 0 1.05rem;
+            padding: 1rem;
+            border: 1px solid rgba(239, 68, 68, 0.24);
+            border-radius: var(--cx-radius);
+            background:
+                radial-gradient(circle at 94% 16%, rgba(239, 68, 68, 0.14), transparent 30%),
+                var(--cx-panel);
+            box-shadow: var(--cx-shadow);
+        }
+
+        .cx-alert-band h3 {
+            margin: 0.25rem 0 0.35rem;
+            color: var(--cx-ink);
+            font-size: 1.08rem;
+        }
+
+        .cx-alert-band p {
+            margin: 0;
+            color: var(--cx-muted);
+            font-size: 0.86rem;
+            line-height: 1.45;
+        }
+
+        .cx-alert-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.85rem;
+        }
+
+        .cx-alert-grid.single {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .cx-alert-card {
+            min-height: 188px;
+            padding: 0.9rem;
+            border: 1px solid rgba(239, 68, 68, 0.18);
+            border-radius: 0.9rem;
+            background: var(--cx-panel-soft);
+        }
+
+        .cx-alert-grid.single .cx-alert-card {
+            min-height: auto;
+        }
+
+        .cx-alert-card h4 {
+            margin: 0.35rem 0 0.35rem;
+            color: var(--cx-ink);
+            font-size: 0.98rem;
+        }
+
+        .cx-alert-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.65rem;
+        }
+
+        .cx-alert-meta span {
+            display: inline-flex;
+            padding: 0.25rem 0.48rem;
+            border-radius: 999px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            font-size: 0.7rem;
+            font-weight: 850;
+        }
+
         .cx-icon-block {
             width: 42px;
             height: 42px;
@@ -1069,6 +1139,7 @@ def apply_app_theme():
 
             .cx-action-grid,
             .cx-action-meta,
+            .cx-alert-grid,
             .cx-intel-grid,
             .cx-graph-outline,
             .cx-readout-grid,
@@ -1658,10 +1729,46 @@ def render_decision_summary_card(top_insight, insight_count, high_count, medium_
     )
 
 
+def action_owner_for_insight(insight):
+    theme = str(insight.issue_theme).lower()
+    if "wait" in theme or "scheduling" in theme:
+        return "Operations lead"
+    if "staff" in theme or "communication" in theme:
+        return "CX manager"
+    if "clean" in theme or "facility" in theme:
+        return "Facilities lead"
+    if "billing" in theme or "payment" in theme:
+        return "Revenue operations"
+    return "Site manager"
+
+
+def action_window_for_insight(insight):
+    negative_rate = insight.metadata.get("negative_rate", 0)
+    if insight.priority_label.startswith("HIGH") or negative_rate >= 0.75:
+        return "Immediate"
+    if insight.priority_label.startswith("MEDIUM") or negative_rate >= 0.4:
+        return "Next 7 days"
+    return "Monitor"
+
+
+def expected_impact_for_insight(insight):
+    negative_rate = insight.metadata.get("negative_rate", 0)
+    if insight.priority_label.startswith("HIGH"):
+        return "Reduce repeat friction"
+    if negative_rate >= 0.4:
+        return "Stabilize service quality"
+    if customer_lens_for_insight(insight) == "Opportunity":
+        return "Protect strength"
+    return "Improve visibility"
+
+
 def render_action_outline_card(insight, index):
     badge_class = priority_class(insight.priority_label)
     keywords = ", ".join(insight.keywords[:4]) if insight.keywords else "No keywords"
     signal_name = escape(insight_display_name(insight, include_reference=True))
+    owner = escape(action_owner_for_insight(insight))
+    action_window = escape(action_window_for_insight(insight))
+    expected_impact = escape(expected_impact_for_insight(insight))
     st.markdown(
         f"""
         <div class="cx-action-card">
@@ -1673,11 +1780,12 @@ def render_action_outline_card(insight, index):
             <h4 style="margin:0 0 0.35rem;">{signal_name}</h4>
             <p style="margin:0 0 0.75rem;">{escape(insight.key_insight)}</p>
             <div class="cx-action-meta">
-                <div><span>Size</span><strong>{insight.metadata.get("cluster_size", 0):,}</strong></div>
-                <div><span>Negative</span><strong>{insight.metadata.get("negative_rate", 0):.0%}</strong></div>
-                <div><span>Score</span><strong>{insight.priority_score:.3f}</strong></div>
+                <div><span>Owner</span><strong>{owner}</strong></div>
+                <div><span>Timeline</span><strong>{action_window}</strong></div>
+                <div><span>Impact</span><strong>{expected_impact}</strong></div>
             </div>
             <div style="margin-top:0.8rem;">
+                <p style="margin:0 0 0.3rem;"><strong style="color:var(--cx-ink);">Evidence:</strong> {insight.metadata.get("cluster_size", 0):,} comments, {insight.metadata.get("negative_rate", 0):.0%} negative, score {insight.priority_score:.3f}</p>
                 <p style="margin:0 0 0.3rem;"><strong style="color:var(--cx-ink);">Keywords:</strong> {escape(keywords)}</p>
                 <p style="margin:0;"><strong style="color:var(--cx-ink);">Root cause:</strong> {escape(insight.root_cause)}</p>
             </div>
@@ -4035,6 +4143,90 @@ def render_overview_coverage_cards(
     st.markdown(f'<div class="cx-command-grid">{cards_html}</div>', unsafe_allow_html=True)
 
 
+def render_immediate_action_alerts(action_insights, causal_engine):
+    """Surface urgent signals that need immediate stakeholder attention."""
+    impact_rows = build_operational_impact_rows(action_insights, causal_engine)
+    alert_rows = [
+        row
+        for row in impact_rows
+        if row["action_window"] == "Immediate"
+        or row["impact_type"] == "Systemic Risk"
+        or str(row["priority"]).startswith("HIGH")
+    ]
+    alert_rows = sorted(
+        alert_rows,
+        key=lambda row: (
+            row["action_window"] == "Immediate",
+            row["priority"].startswith("HIGH"),
+            row["impact_score"],
+        ),
+        reverse=True,
+    )
+    shown_rows = alert_rows[:3]
+
+    if shown_rows:
+        intro = (
+            f"{len(alert_rows)} signal(s) need immediate review. "
+            "These alerts combine high priority, operational impact, negative concentration, and cascade exposure."
+        )
+    else:
+        intro = (
+            "No immediate action alerts are active. Continue monitoring medium-priority signals and protect positive patterns."
+        )
+
+    cards_html = ""
+    if shown_rows:
+        for index, row in enumerate(shown_rows, start=1):
+            cards_html += (
+                '<div class="cx-alert-card">'
+                '<div class="cx-card-topline" style="margin-bottom:0.25rem;">'
+                f'<span class="cx-icon-block">A{index}</span>'
+                f'<span class="cx-chip {priority_class(row["priority"])}">{escape(row["priority"])}</span>'
+                "</div>"
+                f'<h4>{escape(row["signal_name"])} ({escape(row["signal_id"])})</h4>'
+                f'<p>{escape(shorten_text(row["key_insight"], 150))}</p>'
+                '<div class="cx-alert-meta">'
+                f'<span>{escape(row["action_window"])}</span>'
+                f'<span>{escape(row["impact_type"])}</span>'
+                f'<span>{row["negative_rate"]:.0%} negative</span>'
+                f'<span>{row["cascade_count"]} linked signals</span>'
+                "</div>"
+                '<div class="cx-panel-soft" style="padding:0.7rem; border-radius:0.75rem; margin-top:0.7rem;">'
+                '<strong style="color:var(--cx-ink);">Next move:</strong> '
+                f'<span>{escape(shorten_text(row["recommended_action"], 170))}</span>'
+                "</div>"
+                "</div>"
+            )
+    else:
+        cards_html = (
+            '<div class="cx-alert-card">'
+            '<div class="cx-card-topline" style="margin-bottom:0.25rem;">'
+            '<span class="cx-icon-block">OK</span>'
+            '<span class="cx-chip low">Stable</span>'
+            "</div>"
+            "<h4>No immediate alerts</h4>"
+            "<p>The current dataset has no high-priority immediate action signal. Keep the watchlist active and revisit after new feedback is uploaded.</p>"
+            "</div>"
+        )
+
+    st.markdown(
+        f"""
+        <section class="cx-alert-band">
+            <div class="cx-card-topline" style="margin-bottom:0.2rem;">
+                <div>
+                    <p class="cx-eyebrow" style="margin:0;">Immediate action alerts</p>
+                    <h3>Signals that need attention now</h3>
+                    <p>{escape(intro)}</p>
+                </div>
+                <span class="cx-chip high">{len(alert_rows)} active</span>
+            </div>
+            <div class="cx-alert-grid {'single' if len(shown_rows) <= 1 else ''}">{cards_html}</div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_agent_decision_support(
     action_agent,
     action_insights,
@@ -4043,7 +4235,7 @@ def render_agent_decision_support(
     medium_priority_count,
 ):
     st.markdown(
-        '<h3 class="cx-section-heading">AI Agent Decision Support</h3>',
+        '<h3 class="cx-section-heading">Decision Needed</h3>',
         unsafe_allow_html=True,
     )
 
@@ -4170,15 +4362,30 @@ def render_agent_chat(
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    user_question = st.chat_input(
-        "Ask about priorities, cascades, actions, or a specific signal..."
-    )
-    if user_question:
+    question_col, ask_col = st.columns([3.2, 0.8])
+    with question_col:
+        user_question = st.text_area(
+            "Ask PX-Intel",
+            placeholder="Ask about priorities, cascades, actions, or a specific signal...",
+            key="cx_agent_question_input",
+            label_visibility="collapsed",
+            height=84,
+        )
+    with ask_col:
+        ask_submitted = st.button(
+            "Ask PX-Intel",
+            key="cx_agent_question_submit",
+            width="stretch",
+        )
+        st.caption("Answers use the active dataset and visible PX-Intel signals.")
+
+    if ask_submitted and user_question.strip():
+        cleaned_question = user_question.strip()
         st.session_state.cx_agent_messages.append(
-            {"role": "user", "content": user_question}
+            {"role": "user", "content": cleaned_question}
         )
         answer = answer_with_optional_ai(
-            user_question,
+            cleaned_question,
             action_agent,
             action_insights,
             ai_config,
@@ -4189,6 +4396,10 @@ def render_agent_chat(
             {"role": "assistant", "content": answer}
         )
         st.rerun()
+    if ask_submitted and not user_question.strip():
+        st.warning(
+            "Type a question or use one of the suggested prompts above."
+        )
 
 
 def render_customer_action_dashboard(action_agent, action_insights):
@@ -4309,16 +4520,6 @@ def render_overview(
         "A focused command view for KPIs, action priorities, customer experience actions, and the PX-Intel agent.",
         "Overview",
     )
-    render_stakeholder_explanation(
-        "PX-Intel Overview",
-        "executive command view for priority signals, customer actions, and AI-assisted decisions",
-        action_insights,
-        ai_config,
-        feedback_source,
-        texts,
-        clustering_engine,
-        causal_engine,
-    )
 
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     with kpi_col1:
@@ -4350,6 +4551,7 @@ def render_overview(
             "#d97706",
         )
 
+    render_immediate_action_alerts(action_insights, causal_engine)
     render_agent_decision_support(
         action_agent,
         action_insights,
@@ -4357,6 +4559,7 @@ def render_overview(
         high_priority_count,
         medium_priority_count,
     )
+    render_customer_action_dashboard(action_agent, action_insights)
     render_overview_coverage_cards(
         audit_engine,
         causal_engine,
@@ -4364,7 +4567,17 @@ def render_overview(
         clustering_engine,
         texts,
     )
-    render_customer_action_dashboard(action_agent, action_insights)
+    render_stakeholder_explanation(
+        "PX-Intel Overview",
+        "executive command view for priority signals, customer actions, and AI-assisted decisions",
+        action_insights,
+        ai_config,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+        expanded=False,
+    )
     agent_ai_context = build_report_ai_context(
         "Agent Decision Support",
         "Leadership",
@@ -5156,6 +5369,7 @@ def render_stakeholder_explanation(
     clustering_engine=None,
     causal_engine=None,
     extra_context=None,
+    expanded=True,
 ):
     """Render a stakeholder-ready page explanation with optional OpenAI output."""
     context = build_stakeholder_page_context(
@@ -5240,7 +5454,7 @@ def render_stakeholder_explanation(
             "Enable AI enhancement in the sidebar to have OpenAI write this page explanation from the active PX-Intel evidence."
         )
 
-    with st.expander("Stakeholder readout", expanded=True):
+    with st.expander("Stakeholder readout", expanded=expanded):
         st.markdown(ai_brief or local_brief)
 
 

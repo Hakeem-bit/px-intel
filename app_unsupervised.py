@@ -1266,8 +1266,12 @@ def feedback_source_id(upload_name, upload_bytes, text_column):
 
 
 def get_feedback_sources():
-    uploads = st.session_state.get("uploaded_feedback_sources", [])
-    return [default_feedback_source()] + uploads
+    upload_map = {}
+    for source in load_saved_feedback_sources():
+        upload_map[source["id"]] = source
+    for source in st.session_state.get("uploaded_feedback_sources", []):
+        upload_map[source["id"]] = source
+    return [default_feedback_source()] + list(upload_map.values())
 
 
 def remember_uploaded_feedback_source(source, row_count):
@@ -1280,6 +1284,7 @@ def remember_uploaded_feedback_source(source, row_count):
     ]
     uploads.append(stored_source)
     st.session_state.uploaded_feedback_sources = uploads
+    persist_feedback_source(stored_source, row_count)
 
 
 def select_feedback_source_by_id(source_id):
@@ -1298,7 +1303,115 @@ def feedback_source_label(source):
     return f"{source['label']}{row_text}"
 
 
-AI_SETTINGS_PATH = Path.home() / ".px_intel" / "ai_settings.json"
+PX_INTEL_HOME = Path.home() / ".px_intel"
+AI_SETTINGS_PATH = PX_INTEL_HOME / "ai_settings.json"
+UPLOADS_DIR = PX_INTEL_HOME / "uploads"
+UPLOADS_INDEX_PATH = UPLOADS_DIR / "uploads.json"
+
+
+def safe_local_filename(value):
+    """Return a filesystem-safe filename fragment."""
+    cleaned = "".join(
+        char if char.isalnum() or char in {"-", "_", "."} else "_"
+        for char in str(value or "upload")
+    )
+    return cleaned.strip("._") or "upload"
+
+
+def load_saved_feedback_sources():
+    """Load persisted upload metadata and file bytes from local disk."""
+    try:
+        if not UPLOADS_INDEX_PATH.exists():
+            return []
+        index_data = json.loads(UPLOADS_INDEX_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    sources = []
+    for item in index_data if isinstance(index_data, list) else []:
+        try:
+            upload_path = Path(item.get("upload_path", ""))
+            if not upload_path.exists():
+                continue
+            sources.append(
+                {
+                    "id": item["id"],
+                    "kind": "upload",
+                    "label": item.get("label", upload_path.name),
+                    "upload_bytes": upload_path.read_bytes(),
+                    "upload_name": item.get("upload_name", upload_path.name),
+                    "text_column": item.get("text_column", "content"),
+                    "row_count": item.get("row_count"),
+                    "saved": True,
+                    "upload_path": str(upload_path),
+                }
+            )
+        except Exception:
+            continue
+    return sources
+
+
+def write_saved_feedback_sources(metadata_items):
+    """Write persisted upload metadata."""
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOADS_INDEX_PATH.write_text(
+        json.dumps(metadata_items, indent=2),
+        encoding="utf-8",
+    )
+
+
+def persist_feedback_source(source, row_count):
+    """Persist uploaded data locally so it survives app refreshes."""
+    if source.get("kind") != "upload" or not source.get("upload_bytes"):
+        return
+
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = Path(str(source.get("upload_name") or "upload.csv")).suffix.lower()
+    if suffix not in {".csv", ".txt"}:
+        suffix = ".csv"
+    safe_id = safe_local_filename(source.get("id"))
+    upload_path = UPLOADS_DIR / f"{safe_id}{suffix}"
+    upload_path.write_bytes(source["upload_bytes"])
+
+    metadata = {
+        "id": source["id"],
+        "kind": "upload",
+        "label": source.get("label") or source.get("upload_name") or upload_path.name,
+        "upload_name": source.get("upload_name") or upload_path.name,
+        "text_column": source.get("text_column") or "content",
+        "row_count": row_count,
+        "upload_path": str(upload_path),
+    }
+    existing = []
+    if UPLOADS_INDEX_PATH.exists():
+        try:
+            existing = json.loads(UPLOADS_INDEX_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            existing = []
+    existing = [
+        item
+        for item in existing
+        if isinstance(item, dict) and item.get("id") != metadata["id"]
+    ]
+    existing.append(metadata)
+    write_saved_feedback_sources(existing)
+
+
+def clear_saved_feedback_sources():
+    """Remove locally persisted uploads."""
+    if UPLOADS_INDEX_PATH.exists():
+        try:
+            for item in json.loads(UPLOADS_INDEX_PATH.read_text(encoding="utf-8")):
+                upload_path = Path(item.get("upload_path", ""))
+                if upload_path.exists() and upload_path.parent == UPLOADS_DIR:
+                    upload_path.unlink()
+        except Exception:
+            pass
+    try:
+        if UPLOADS_INDEX_PATH.exists():
+            UPLOADS_INDEX_PATH.unlink()
+    except Exception:
+        pass
 
 
 def load_saved_ai_settings():
@@ -1444,6 +1557,10 @@ def render_sidebar():
             if uploaded_file is None:
                 if feedback_source["kind"] == "default":
                     st.caption("Using bundled `text_data.csv` sample feedback.")
+                elif feedback_source.get("saved"):
+                    st.caption(
+                        "Using a saved uploaded dataset. It is stored locally on this Mac."
+                    )
                 else:
                     st.caption(
                         "Using an uploaded dataset stored in this browser session."
@@ -1489,11 +1606,11 @@ def render_sidebar():
                         == feedback_source["id"]
                     ):
                         st.success(
-                            f"Active upload: {len(preview_df):,} rows ready for PX-Intel."
+                            f"Active upload saved locally: {len(preview_df):,} rows ready for PX-Intel."
                         )
                     else:
                         st.info(
-                            f"Uploaded dataset saved for this session: {len(preview_df):,} rows."
+                            f"Uploaded dataset saved locally: {len(preview_df):,} rows."
                         )
                         if st.button(
                             "Use this uploaded dataset",
@@ -1507,21 +1624,22 @@ def render_sidebar():
                     st.error(f"Upload could not be read: {exc}")
                     st.caption("PX-Intel will continue using the bundled sample data.")
 
-            uploaded_count = len(st.session_state.get("uploaded_feedback_sources", []))
+            uploaded_count = max(len(get_feedback_sources()) - 1, 0)
             if uploaded_count:
                 clear_uploads = st.button(
                     "Clear uploaded datasets",
                     key="clear_uploaded_feedback_sources",
-                    help="Remove uploaded files from this session. The bundled sample data remains available.",
+                    help="Remove uploaded files from this session and local saved upload storage. The bundled sample data remains available.",
                     width="stretch",
                 )
                 if clear_uploads:
                     st.session_state.uploaded_feedback_sources = []
+                    clear_saved_feedback_sources()
                     st.session_state.active_feedback_source_id = "sample"
                     st.rerun()
                 st.caption(
-                    f"{uploaded_count} uploaded dataset(s) available in this session. "
-                    "They are not written to the project folder."
+                    f"{uploaded_count} uploaded dataset(s) available to PX-Intel. "
+                    "Saved uploads are stored locally outside the project folder."
                 )
 
         saved_ai_settings = load_saved_ai_settings()

@@ -134,6 +134,8 @@ class OpenAIInsightEnhancer:
                 "Use only the provided PX-Intel context.",
                 "Reference professional signal names, not raw cluster labels.",
                 "Include evidence, metric reasoning, owner-ready next actions, and success measures.",
+                "If the user asks what current actions need to be taken, return a concise current action queue, not a full operational plan.",
+                "Only write a multi-step operational plan when the user explicitly asks for a plan, 30-day plan, or operating cadence.",
                 "If response_mode asks for a plan or memo, produce a complete artifact with headings.",
                 "If information is missing, say what is not available.",
                 *GENERATION_MODE_REQUIREMENTS.get(

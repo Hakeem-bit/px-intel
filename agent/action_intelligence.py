@@ -195,8 +195,20 @@ class CXActionIntelligenceAgent:
         if any(token in normalized for token in ("cascade", "connected", "link", "related")):
             return self._answer_cascades(insights)
 
-        if any(token in normalized for token in ("recommend", "action", "next", "do")):
+        if any(
+            phrase in normalized
+            for phrase in (
+                "30-day",
+                "30 day",
+                "action plan",
+                "operational plan",
+                "plan",
+            )
+        ):
             return self._answer_actions(insights)
+
+        if any(token in normalized for token in ("recommend", "action", "next", "do")):
+            return self._answer_current_actions(insights)
 
         if any(token in normalized for token in ("summary", "summarize", "leadership", "executive")):
             return self._answer_summary(insights)
@@ -322,6 +334,65 @@ class CXActionIntelligenceAgent:
                     f"   - Success metric: {self._success_metric_for(item)}"
                 )
             )
+        return "\n".join(lines)
+
+    def _answer_current_actions(self, insights: List[ActionInsight]) -> str:
+        """Return a direct current action queue instead of a full plan."""
+        urgent = [
+            item
+            for item in insights
+            if item.priority_label.startswith("HIGH")
+            or item.metadata.get("negative_rate", 0) >= 0.75
+        ]
+        watchlist = [
+            item
+            for item in insights
+            if item not in urgent
+            and (
+                item.priority_label.startswith("MEDIUM")
+                or item.metadata.get("negative_rate", 0) >= 0.4
+            )
+        ]
+        selected = []
+        seen_clusters = set()
+        for item in urgent + watchlist + insights:
+            if item.cluster_id in seen_clusters:
+                continue
+            selected.append(item)
+            seen_clusters.add(item.cluster_id)
+            if len(selected) >= 4:
+                break
+
+        lines = [
+            "### Current actions to take",
+            "",
+            (
+                "These are the actions that should be taken from the current PX-Intel evidence. "
+                "This is a direct action queue, not a long-range operating plan."
+            ),
+            "",
+        ]
+        for index, item in enumerate(selected, start=1):
+            action_label = (
+                "Immediate action"
+                if item in urgent
+                else "Next action"
+                if item in watchlist
+                else "Monitor"
+            )
+            lines.append(
+                (
+                    f"{index}. **{action_label}: {insight_display_name(item, include_reference=True)}**\n"
+                    f"   - Why now: {item.metadata.get('cluster_size', 0):,} comments, "
+                    f"{item.metadata.get('negative_rate', 0):.0%} negative concentration, "
+                    f"priority score {item.priority_score:.3f}.\n"
+                    f"   - Owner: {self._owner_for(item)}\n"
+                    f"   - Timeline: {self._action_window_for(item)}\n"
+                    f"   - Action: {item.recommended_action}\n"
+                    f"   - Success metric: {self._success_metric_for(item)}"
+                )
+            )
+
         return "\n".join(lines)
 
     def _answer_cascades(self, insights: List[ActionInsight]) -> str:

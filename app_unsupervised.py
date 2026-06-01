@@ -4395,7 +4395,7 @@ def render_agent_chat(
             )
 
     chat_signature = (
-        "structured_v2",
+        "structured_v3",
         "ai" if ai_config and ai_config.get("enabled") else "local",
         ai_config.get("model") if ai_config else "local",
         ai_config.get("generation_strength") if ai_config else "local",

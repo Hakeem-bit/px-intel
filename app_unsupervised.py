@@ -1113,24 +1113,74 @@ def normalize_feedback_dataframe(raw_df, text_column):
     return df, stats
 
 
+def default_feedback_source():
+    return {
+        "id": "sample",
+        "kind": "default",
+        "label": "Sample data",
+        "upload_bytes": None,
+        "upload_name": None,
+        "text_column": "content",
+        "row_count": 108,
+    }
+
+
 def build_feedback_source(uploaded_file, selected_column=None):
     if uploaded_file is None:
-        return {
-            "kind": "default",
-            "label": "Sample data",
-            "upload_bytes": None,
-            "upload_name": None,
-            "text_column": "content",
-        }
+        return default_feedback_source()
 
     upload_bytes = uploaded_file.getvalue()
+    source_id = feedback_source_id(uploaded_file.name, upload_bytes, selected_column)
     return {
+        "id": source_id,
         "kind": "upload",
         "label": uploaded_file.name,
         "upload_bytes": upload_bytes,
         "upload_name": uploaded_file.name,
         "text_column": selected_column,
+        "row_count": None,
     }
+
+
+def feedback_source_id(upload_name, upload_bytes, text_column):
+    digest = hashlib.sha256(
+        upload_bytes + str(text_column or "").encode("utf-8")
+    ).hexdigest()[:12]
+    safe_name = Path(str(upload_name or "upload")).stem[:24] or "upload"
+    return f"upload-{safe_name}-{digest}"
+
+
+def get_feedback_sources():
+    uploads = st.session_state.get("uploaded_feedback_sources", [])
+    return [default_feedback_source()] + uploads
+
+
+def remember_uploaded_feedback_source(source, row_count):
+    stored_source = dict(source)
+    stored_source["row_count"] = row_count
+    uploads = [
+        item
+        for item in st.session_state.get("uploaded_feedback_sources", [])
+        if item.get("id") != stored_source["id"]
+    ]
+    uploads.append(stored_source)
+    st.session_state.uploaded_feedback_sources = uploads
+
+
+def select_feedback_source_by_id(source_id):
+    for source in get_feedback_sources():
+        if source.get("id") == source_id:
+            return source
+    return default_feedback_source()
+
+
+def feedback_source_label(source):
+    row_text = (
+        f" · {source['row_count']:,} rows"
+        if source.get("row_count") is not None
+        else ""
+    )
+    return f"{source['label']}{row_text}"
 
 
 def read_openai_key_from_config():
@@ -1194,8 +1244,39 @@ def render_sidebar():
             key="cx_sidebar_section",
         )
 
-        feedback_source = build_feedback_source(None)
+        if "active_feedback_source_id" not in st.session_state:
+            st.session_state.active_feedback_source_id = "sample"
+
+        feedback_sources = get_feedback_sources()
+        source_ids = [source["id"] for source in feedback_sources]
+        if st.session_state.active_feedback_source_id not in source_ids:
+            st.session_state.active_feedback_source_id = "sample"
+        if (
+            st.session_state.get("feedback_source_selector")
+            != st.session_state.active_feedback_source_id
+        ):
+            st.session_state.feedback_source_selector = (
+                st.session_state.active_feedback_source_id
+            )
+
+        feedback_source = select_feedback_source_by_id(
+            st.session_state.active_feedback_source_id
+        )
         with st.expander("Data source", expanded=True):
+            selected_source_id = st.selectbox(
+                "Active dataset",
+                source_ids,
+                index=source_ids.index(st.session_state.active_feedback_source_id),
+                format_func=lambda source_id: feedback_source_label(
+                    select_feedback_source_by_id(source_id)
+                ),
+                key="feedback_source_selector",
+                help="Switch between the bundled sample and uploaded files kept in this session.",
+            )
+            if selected_source_id != st.session_state.active_feedback_source_id:
+                st.session_state.active_feedback_source_id = selected_source_id
+                feedback_source = select_feedback_source_by_id(selected_source_id)
+
             uploaded_file = st.file_uploader(
                 "Upload customer feedback",
                 type=["csv", "txt"],
@@ -1203,7 +1284,12 @@ def render_sidebar():
                 key="customer_feedback_upload",
             )
             if uploaded_file is None:
-                st.caption("Using bundled `text_data.csv` sample feedback.")
+                if feedback_source["kind"] == "default":
+                    st.caption("Using bundled `text_data.csv` sample feedback.")
+                else:
+                    st.caption(
+                        "Using an uploaded dataset stored in this browser session."
+                    )
             else:
                 try:
                     upload_bytes = uploaded_file.getvalue()
@@ -1227,11 +1313,58 @@ def render_sidebar():
                         uploaded_file,
                         selected_column,
                     )
-                    st.success(f"Ready to process {len(preview_df):,} uploaded rows.")
-                    st.caption(f"Active file: `{uploaded_file.name}`")
+                    source_already_stored = any(
+                        item.get("id") == feedback_source["id"]
+                        for item in st.session_state.get(
+                            "uploaded_feedback_sources", []
+                        )
+                    )
+                    remember_uploaded_feedback_source(
+                        feedback_source,
+                        len(preview_df),
+                    )
+                    if not source_already_stored:
+                        st.session_state.active_feedback_source_id = feedback_source["id"]
+                        st.rerun()
+                    if (
+                        st.session_state.active_feedback_source_id
+                        == feedback_source["id"]
+                    ):
+                        st.success(
+                            f"Active upload: {len(preview_df):,} rows ready for PX-Intel."
+                        )
+                    else:
+                        st.info(
+                            f"Uploaded dataset saved for this session: {len(preview_df):,} rows."
+                        )
+                        if st.button(
+                            "Use this uploaded dataset",
+                            key=f"use_uploaded_dataset_{feedback_source['id']}",
+                            width="stretch",
+                        ):
+                            st.session_state.active_feedback_source_id = feedback_source["id"]
+                            st.rerun()
+                    st.caption(f"File: `{uploaded_file.name}`")
                 except Exception as exc:
                     st.error(f"Upload could not be read: {exc}")
                     st.caption("PX-Intel will continue using the bundled sample data.")
+
+            uploaded_count = len(st.session_state.get("uploaded_feedback_sources", []))
+            if uploaded_count:
+                clear_uploads = st.button(
+                    "Clear uploaded datasets",
+                    key="clear_uploaded_feedback_sources",
+                    help="Remove uploaded files from this session. The bundled sample data remains available.",
+                    width="stretch",
+                )
+                if clear_uploads:
+                    st.session_state.uploaded_feedback_sources = []
+                    st.session_state.active_feedback_source_id = "sample"
+                    st.rerun()
+                st.caption(
+                    f"{uploaded_count} uploaded dataset(s) available in this session. "
+                    "They are not written to the project folder."
+                )
 
         configured_key = read_openai_key_from_config()
         configured_model = read_openai_model_from_config()
@@ -4335,6 +4468,8 @@ def build_written_report(
     audit_engine,
     causal_engine,
     action_insights,
+    report_depth="Board-ready",
+    feedback_source=None,
 ):
     generated_at = pd.Timestamp.now().strftime("%B %d, %Y")
     high_priority = [
@@ -4356,12 +4491,22 @@ def build_written_report(
         if customer_lens_for_insight(insight) == "At Risk"
     ]
     top_insight = action_insights[0] if action_insights else None
+    data_source_label = (
+        feedback_source.get("label", "Current dataset")
+        if feedback_source
+        else "Current dataset"
+    )
+    action_windows = {}
+    for row in impact_rows:
+        action_windows.setdefault(row["action_window"], []).append(row)
 
     lines = [
         f"# PX-Intel {report_type}",
         "",
         f"Generated: {generated_at}",
         f"Audience: {audience}",
+        f"Report depth: {report_depth}",
+        f"Data source: {data_source_label}",
         "",
         "## Executive Readout",
         "",
@@ -4404,6 +4549,32 @@ def build_written_report(
         ]
     )
 
+    lines.extend(["## What PX-Intel Learned From This Dataset", ""])
+    if action_insights:
+        negative_weighted = np.mean(
+            [insight.metadata.get("negative_rate", 0) for insight in action_insights]
+        )
+        top_themes = ", ".join(
+            [
+                insight_display_name(insight)
+                for insight in action_insights[: min(3, len(action_insights))]
+            ]
+        )
+        lines.extend(
+            [
+                (
+                    f"The current dataset is organized around {len(action_insights)} primary experience signals. "
+                    f"Average visible negative concentration is {negative_weighted:.0%}, with the strongest signals concentrated in: {top_themes}."
+                ),
+                (
+                    "PX-Intel is not treating the uploaded file as a generic survey export; the report is generated from the active clustering, sentiment, causal, and action-intelligence outputs."
+                ),
+                "",
+            ]
+        )
+    else:
+        lines.extend(["No learned signal profile is available yet.", ""])
+
     lines.extend(["## Priority Issues", ""])
     for index, insight in enumerate(action_insights[:5], start=1):
         lines.extend(
@@ -4416,6 +4587,23 @@ def build_written_report(
         )
     if not action_insights:
         lines.append("No priority issues are available.")
+    lines.append("")
+
+    lines.extend(["## Evidence Highlights", ""])
+    for insight in action_insights[:5]:
+        lines.extend(
+            [
+                f"- {insight_display_name(insight, include_reference=True)}",
+                (
+                    f"  - Signal strength: {insight.metadata.get('cluster_size', 0):,} feedback entries, "
+                    f"{insight.metadata.get('negative_rate', 0):.0%} negative, priority score {insight.priority_score:.3f}"
+                ),
+                f"  - Evidence: {shorten_text(insight.example_feedback, 220)}",
+                f"  - Manager response: {insight.recommended_action}",
+            ]
+        )
+    if not action_insights:
+        lines.append("No evidence highlights are available.")
     lines.append("")
 
     if report_type == "Operational Action Report":
@@ -4462,6 +4650,27 @@ def build_written_report(
             )
         lines.append("")
 
+    lines.extend(["## Action Playbook By Timing", ""])
+    for window in ["Immediate", "Next 7 Days", "Monitor"]:
+        window_rows = action_windows.get(window, [])[:4]
+        if not window_rows:
+            continue
+        lines.append(f"### {window}")
+        for row in window_rows:
+            lines.extend(
+                [
+                    f"- {row['signal_name']} ({row['signal_id']}): {row['recommended_action']}",
+                    (
+                        f"  - Why now: {row['impact_type']}; impact score {row['impact_score']:.3f}; "
+                        f"{row['negative_rate']:.0%} negative feedback."
+                    ),
+                ]
+            )
+        lines.append("")
+    if not any(action_windows.values()):
+        lines.append("No timing-based action plan is available.")
+        lines.append("")
+
     top_cascade = None
     for row in impact_rows:
         if row["cascade_targets"]:
@@ -4488,10 +4697,62 @@ def build_written_report(
             "2. Use the Change Impact Simulator to test how fixing one issue may affect related signals.",
             "3. Export the action, audit, and impact CSVs for deeper operational follow-up.",
             "4. Review the report after new feedback data is loaded.",
+            "5. If AI enhancement is enabled, use the AI report writer for a board-ready narrative over this same evidence base.",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def build_report_ai_context(
+    report_type,
+    audience,
+    report_depth,
+    feedback_source,
+    texts,
+    clustering_engine,
+    causal_engine,
+    action_insights,
+):
+    impact_rows = build_operational_impact_rows(action_insights, causal_engine)
+    return {
+        "report_type": report_type,
+        "audience": audience,
+        "report_depth": report_depth,
+        "active_data_source": feedback_source_label(feedback_source)
+        if feedback_source
+        else "Current dataset",
+        "feedback_entries": len(texts),
+        "experience_signals": clustering_engine.optimal_n_clusters,
+        "top_signals": [
+            {
+                "signal_id": signal_reference(insight.cluster_id),
+                "name": insight_display_name(insight),
+                "priority": insight.priority_label,
+                "score": insight.priority_score,
+                "negative_rate": insight.metadata.get("negative_rate", 0),
+                "volume": insight.metadata.get("cluster_size", 0),
+                "evidence": insight.example_feedback,
+                "root_cause": insight.root_cause,
+                "recommended_action": insight.recommended_action,
+            }
+            for insight in action_insights[:8]
+        ],
+        "operational_impact": [
+            {
+                "signal_id": row["signal_id"],
+                "name": row["signal_name"],
+                "impact_type": row["impact_type"],
+                "action_window": row["action_window"],
+                "impact_score": row["impact_score"],
+                "cascade_targets": [
+                    signal_reference(target) for target in row["cascade_targets"]
+                ],
+                "recommended_action": row["recommended_action"],
+            }
+            for row in impact_rows[:8]
+        ],
+    }
 
 
 def render_written_report_generator(
@@ -4501,12 +4762,13 @@ def render_written_report_generator(
     causal_engine,
     action_insights,
     ai_config=None,
+    feedback_source=None,
 ):
     st.markdown(
         '<h4 class="cx-section-heading">Written Report Builder</h4>',
         unsafe_allow_html=True,
     )
-    report_col, audience_col = st.columns([1, 1])
+    report_col, audience_col, depth_col = st.columns([1, 1, 1])
     with report_col:
         report_type = st.selectbox(
             "Report type",
@@ -4523,6 +4785,12 @@ def render_written_report_generator(
             ["Leadership", "Operations", "Customer Experience", "Analyst Review"],
             key="written_report_audience",
         )
+    with depth_col:
+        report_depth = st.selectbox(
+            "Depth",
+            ["Board-ready", "Operational detail", "Brief"],
+            key="written_report_depth",
+        )
 
     base_report = build_written_report(
         report_type,
@@ -4532,13 +4800,25 @@ def render_written_report_generator(
         audit_engine,
         causal_engine,
         action_insights,
+        report_depth,
+        feedback_source,
     )
     report_text = base_report
     report_signature = hashlib.sha256(
-        f"{report_type}|{audience}|{base_report}|{ai_config.get('model') if ai_config else ''}".encode(
+        f"{report_type}|{audience}|{report_depth}|{base_report}|{ai_config.get('model') if ai_config else ''}".encode(
             "utf-8"
         )
     ).hexdigest()
+    report_context = build_report_ai_context(
+        report_type,
+        audience,
+        report_depth,
+        feedback_source,
+        texts,
+        clustering_engine,
+        causal_engine,
+        action_insights,
+    )
 
     if ai_config and ai_config.get("enabled"):
         ai_col, note_col = st.columns([0.9, 2.1])
@@ -4565,6 +4845,7 @@ def render_written_report_generator(
                         audience,
                         base_report,
                         action_insights,
+                        report_context,
                     )
                 st.session_state.ai_written_report_signature = report_signature
                 st.session_state.ai_written_report_text = report_text
@@ -4599,6 +4880,7 @@ def render_reports_export(
     action_agent,
     action_insights,
     ai_config=None,
+    feedback_source=None,
 ):
     render_page_header(
         "Reports & Export",
@@ -4649,6 +4931,7 @@ def render_reports_export(
         causal_engine,
         action_insights,
         ai_config,
+        feedback_source,
     )
 
     preview_col, summary_col = st.columns([1.45, 1])
@@ -4980,6 +5263,7 @@ def main():
             action_agent,
             action_insights,
             ai_config,
+            feedback_source,
         )
         return
 

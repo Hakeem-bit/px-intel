@@ -136,6 +136,7 @@ class OpenAIInsightEnhancer:
         audience: str,
         base_report: str,
         insights: List[ActionInsight],
+        report_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Rewrite the deterministic report into a sharper management narrative."""
         if not self.enabled:
@@ -144,6 +145,7 @@ class OpenAIInsightEnhancer:
             "report_type": report_type,
             "audience": audience,
             "base_report": base_report,
+            "report_context": report_context or {},
             "signals": self._build_prompt_payload(insights[:8]),
             "requirements": [
                 "Return a polished Markdown report.",
@@ -151,6 +153,8 @@ class OpenAIInsightEnhancer:
                 "Do not invent facts or make claims not supported by the provided data.",
                 "Use professional signal names instead of generic cluster labels.",
                 "Make recommendations concrete, owner-oriented, and operational.",
+                "Include an executive readout, evidence-backed findings, operational playbook, risk/cascade implications, and next decisions.",
+                "Use the report depth and audience from report_context to tune the level of detail.",
             ],
         }
         return self._call_openai(
@@ -242,7 +246,10 @@ raw cluster labels unless the user asks for technical IDs.
 AI_REPORT_INSTRUCTIONS = """
 You write professional customer-experience intelligence reports. Preserve the
 provided facts and metrics, improve specificity and clarity, and avoid generic
-consulting language. Return Markdown only.
+consulting language. The report should feel like it learned from the active
+dataset: cite the strongest signals, quote or summarize evidence, explain why
+each recommendation follows from the metrics, and separate immediate actions
+from monitored risks. Return Markdown only.
 """
 
 

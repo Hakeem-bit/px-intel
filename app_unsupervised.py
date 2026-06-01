@@ -297,6 +297,7 @@ def apply_app_theme():
             border-radius: var(--cx-radius);
             background: var(--cx-panel);
             box-shadow: var(--cx-shadow);
+            margin-bottom: 0.35rem;
         }
 
         .cx-kpi-label {
@@ -331,7 +332,7 @@ def apply_app_theme():
         .cx-decision-card,
         .cx-action-card {
             min-height: 100%;
-            padding: 1rem;
+            padding: 1.1rem;
             border: 1px solid var(--cx-border);
             border-radius: var(--cx-radius);
             background: var(--cx-panel);
@@ -386,8 +387,8 @@ def apply_app_theme():
         }
 
         .cx-alert-band {
-            margin: 0.9rem 0 1.05rem;
-            padding: 1rem;
+            margin: 1.25rem 0 1.55rem;
+            padding: 1.1rem;
             border: 1px solid rgba(239, 68, 68, 0.24);
             border-radius: var(--cx-radius);
             background:
@@ -508,7 +509,7 @@ def apply_app_theme():
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 1rem;
-            margin: 0.65rem 0 1rem;
+            margin: 0.85rem 0 1.25rem;
         }
 
         .cx-action-meta {
@@ -787,7 +788,7 @@ def apply_app_theme():
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.85rem;
-            margin: 0.85rem 0 1rem;
+            margin: 0.95rem 0 1.45rem;
         }
 
         .cx-command-card {
@@ -878,15 +879,17 @@ def apply_app_theme():
         }
 
         .cx-section-heading {
-            margin: 1.55rem 0 0.72rem;
+            margin: 2rem 0 0.85rem;
             color: var(--cx-ink);
             font-weight: 800;
+            font-size: 1.3rem;
+            line-height: 1.22;
             letter-spacing: 0;
         }
 
         .cx-page-header {
-            margin: 0.15rem 0 1.15rem;
-            padding-bottom: 0.9rem;
+            margin: 0.2rem 0 1.25rem;
+            padding-bottom: 1rem;
             border-bottom: 1px solid var(--cx-border);
         }
 
@@ -919,7 +922,7 @@ def apply_app_theme():
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            margin: 0.1rem 0 1rem;
+            margin: 0.1rem 0 1.15rem;
             padding: 0.95rem 1.05rem;
             border: 1px solid var(--cx-border);
             border-radius: var(--cx-radius);
@@ -1295,6 +1298,42 @@ def feedback_source_label(source):
     return f"{source['label']}{row_text}"
 
 
+AI_SETTINGS_PATH = Path.home() / ".px_intel" / "ai_settings.json"
+
+
+def load_saved_ai_settings():
+    """Load locally saved AI settings from this Mac, if available."""
+    try:
+        if AI_SETTINGS_PATH.exists():
+            data = json.loads(AI_SETTINGS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        return {}
+    return {}
+
+
+def save_ai_settings(api_key, model, generation_strength, enabled):
+    """Persist AI settings locally so refreshes keep the configured mode."""
+    AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "api_key": str(api_key or "").strip(),
+        "model": str(model or "gpt-4o-mini").strip(),
+        "generation_strength": generation_strength or "Board-ready",
+        "enabled": bool(enabled),
+    }
+    AI_SETTINGS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def clear_saved_ai_settings():
+    """Remove the local AI settings file."""
+    try:
+        if AI_SETTINGS_PATH.exists():
+            AI_SETTINGS_PATH.unlink()
+    except Exception:
+        pass
+
+
 def read_openai_key_from_config():
     """Read an OpenAI key from Streamlit secrets or the shell environment."""
     try:
@@ -1485,22 +1524,41 @@ def render_sidebar():
                     "They are not written to the project folder."
                 )
 
-        configured_key = read_openai_key_from_config()
-        configured_model = read_openai_model_from_config()
+        saved_ai_settings = load_saved_ai_settings()
+        configured_key = read_openai_key_from_config() or saved_ai_settings.get(
+            "api_key",
+            "",
+        )
+        configured_model = saved_ai_settings.get(
+            "model",
+            read_openai_model_from_config(),
+        )
+        saved_strength = saved_ai_settings.get("generation_strength", "Board-ready")
+        if saved_strength not in ["Board-ready", "Operational detail", "Brief"]:
+            saved_strength = "Board-ready"
+        if "openai_api_key_input" not in st.session_state and configured_key:
+            st.session_state.openai_api_key_input = configured_key
+        if "openai_model_input" not in st.session_state:
+            st.session_state.openai_model_input = configured_model
+        if "ai_generation_strength" not in st.session_state:
+            st.session_state.ai_generation_strength = saved_strength
+        if "ai_enhancement_enabled" not in st.session_state:
+            st.session_state.ai_enhancement_enabled = bool(
+                saved_ai_settings.get("enabled", bool(configured_key))
+            )
+
         with st.expander("AI enhancement", expanded=False):
             st.caption(
                 "Optional: use an OpenAI key to sharpen signal naming, stakeholder explanations, reports, and agent answers."
             )
             entered_key = st.text_input(
                 "OpenAI API key",
-                value="",
                 type="password",
                 placeholder="Uses secrets/env if left blank",
                 key="openai_api_key_input",
             )
             ai_model = st.text_input(
                 "AI model",
-                value=configured_model,
                 key="openai_model_input",
             )
             generation_strength = st.selectbox(
@@ -1512,10 +1570,38 @@ def render_sidebar():
             ai_key = entered_key.strip() or configured_key
             ai_enabled = st.toggle(
                 "Use AI-enhanced language",
-                value=bool(ai_key),
                 key="ai_enhancement_enabled",
                 help="The deterministic PX-Intel pipeline still runs first. AI only rewrites manager-facing language from the existing evidence.",
             )
+            save_col, clear_col = st.columns(2)
+            with save_col:
+                save_ai = st.button(
+                    "Save AI settings",
+                    key="save_ai_settings",
+                    help="Save the key and model locally on this Mac so refreshes keep AI mode enabled.",
+                    width="stretch",
+                )
+            with clear_col:
+                clear_ai = st.button(
+                    "Clear saved AI",
+                    key="clear_ai_settings",
+                    help="Remove the locally saved AI settings file.",
+                    width="stretch",
+                )
+            if save_ai:
+                if ai_key:
+                    save_ai_settings(
+                        ai_key,
+                        ai_model,
+                        generation_strength,
+                        ai_enabled,
+                    )
+                    st.success("AI settings saved locally for future refreshes.")
+                else:
+                    st.warning("Enter an OpenAI API key before saving AI settings.")
+            if clear_ai:
+                clear_saved_ai_settings()
+                st.success("Saved AI settings cleared. Refresh to start without saved AI settings.")
             refresh_requested = False
             if ai_enabled and ai_key:
                 st.success("AI enhancement ready.")
@@ -1526,6 +1612,9 @@ def render_sidebar():
                 )
             else:
                 st.caption("PX-Intel will use the local rule-based intelligence layer.")
+            st.caption(
+                "Saved settings are stored locally on this Mac, outside the git repository."
+            )
 
         ai_config = build_ai_config(
             ai_key,
@@ -4306,6 +4395,7 @@ def render_agent_chat(
             )
 
     chat_signature = (
+        "structured_v2",
         "ai" if ai_config and ai_config.get("enabled") else "local",
         ai_config.get("model") if ai_config else "local",
         ai_config.get("generation_strength") if ai_config else "local",
@@ -4566,17 +4656,6 @@ def render_overview(
         action_insights,
         clustering_engine,
         texts,
-    )
-    render_stakeholder_explanation(
-        "PX-Intel Overview",
-        "executive command view for priority signals, customer actions, and AI-assisted decisions",
-        action_insights,
-        ai_config,
-        feedback_source,
-        texts,
-        clustering_engine,
-        causal_engine,
-        expanded=False,
     )
     agent_ai_context = build_report_ai_context(
         "Agent Decision Support",

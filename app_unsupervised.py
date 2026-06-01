@@ -8,8 +8,9 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import io
 from html import escape
-from data_loader import DataLoader
+from data_loader import DataLoader, LoaderStats
 from unsupervised_clustering import UnsupervisedClusteringEngine
 from cluster_audit import ClusterAuditEngine
 from causal_reasoning import CausalReasoningEngine
@@ -1040,6 +1041,90 @@ def apply_app_theme():
 
 apply_app_theme()
 
+
+def parse_uploaded_feedback(upload_bytes, filename):
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(
+            io.BytesIO(upload_bytes),
+            engine="python",
+            on_bad_lines="skip",
+        )
+    if suffix == ".txt":
+        raw_text = upload_bytes.decode("utf-8", errors="replace")
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        return pd.DataFrame({"content": lines})
+    raise ValueError("Upload a CSV or TXT file.")
+
+
+def guess_feedback_text_column(columns):
+    normalized = {str(column).lower().strip(): column for column in columns}
+    for candidate in [
+        "content",
+        "feedback",
+        "comment",
+        "comments",
+        "review",
+        "text",
+        "message",
+        "description",
+    ]:
+        if candidate in normalized:
+            return normalized[candidate]
+    return columns[0] if columns else None
+
+
+def normalize_feedback_dataframe(raw_df, text_column):
+    df = raw_df.copy()
+    if text_column not in df.columns:
+        raise ValueError(f"Column `{text_column}` was not found in the uploaded file.")
+
+    total_rows = len(df)
+    df[text_column] = df[text_column].where(df[text_column].notna(), "")
+    df[text_column] = df[text_column].astype(str)
+    df = df[df[text_column].str.strip() != ""].copy()
+    empty_rows = total_rows - len(df)
+
+    df["content"] = df[text_column]
+    df["text_normalized"] = df["content"].apply(DataLoader._normalize_text)
+    df = df[df["text_normalized"].str.strip() != ""].copy()
+
+    text_lengths = df["content"].str.len()
+    successful_rows = len(df)
+    failed_rows = total_rows - successful_rows
+    stats = LoaderStats(
+        total_rows=total_rows,
+        successful_rows=successful_rows,
+        failed_rows=failed_rows,
+        empty_rows=empty_rows,
+        success_rate=round(100 * successful_rows / total_rows, 2) if total_rows > 0 else 0,
+        min_length=int(text_lengths.min()) if len(text_lengths) > 0 else 0,
+        max_length=int(text_lengths.max()) if len(text_lengths) > 0 else 0,
+        avg_length=float(text_lengths.mean()) if len(text_lengths) > 0 else 0,
+    )
+    return df, stats
+
+
+def build_feedback_source(uploaded_file, selected_column=None):
+    if uploaded_file is None:
+        return {
+            "kind": "default",
+            "label": "Sample data",
+            "upload_bytes": None,
+            "upload_name": None,
+            "text_column": "content",
+        }
+
+    upload_bytes = uploaded_file.getvalue()
+    return {
+        "kind": "upload",
+        "label": uploaded_file.name,
+        "upload_bytes": upload_bytes,
+        "upload_name": uploaded_file.name,
+        "text_column": selected_column,
+    }
+
+
 def render_sidebar():
     """Render Soft UI-inspired PX-Intel navigation context."""
     with st.sidebar:
@@ -1072,6 +1157,45 @@ def render_sidebar():
             key="cx_sidebar_section",
         )
 
+        feedback_source = build_feedback_source(None)
+        with st.expander("Data source", expanded=True):
+            uploaded_file = st.file_uploader(
+                "Upload customer feedback",
+                type=["csv", "txt"],
+                help="Upload a CSV with a feedback text column, or a TXT file with one comment per line.",
+                key="customer_feedback_upload",
+            )
+            if uploaded_file is None:
+                st.caption("Using bundled `text_data.csv` sample feedback.")
+            else:
+                try:
+                    upload_bytes = uploaded_file.getvalue()
+                    preview_df = parse_uploaded_feedback(upload_bytes, uploaded_file.name)
+                    if preview_df.empty:
+                        raise ValueError("The uploaded file does not contain feedback rows.")
+                    default_column = guess_feedback_text_column(list(preview_df.columns))
+                    column_options = list(preview_df.columns)
+                    default_index = (
+                        column_options.index(default_column)
+                        if default_column in column_options
+                        else 0
+                    )
+                    selected_column = st.selectbox(
+                        "Feedback text column",
+                        column_options,
+                        index=default_index,
+                        key="customer_feedback_text_column",
+                    )
+                    feedback_source = build_feedback_source(
+                        uploaded_file,
+                        selected_column,
+                    )
+                    st.success(f"Ready to process {len(preview_df):,} uploaded rows.")
+                    st.caption(f"Active file: `{uploaded_file.name}`")
+                except Exception as exc:
+                    st.error(f"Upload could not be read: {exc}")
+                    st.caption("PX-Intel will continue using the bundled sample data.")
+
         st.markdown(
             """
             <div class="cx-sidebar-card">
@@ -1090,7 +1214,7 @@ def render_sidebar():
             """,
             unsafe_allow_html=True,
         )
-        return selected_section
+        return selected_section, feedback_source
 
 
 def render_hero():
@@ -4402,7 +4526,7 @@ def render_reports_export(
 # ============================================================================
 
 
-@st.cache_resource
+@st.cache_data
 def load_data():
     """Load and normalize feedback data."""
     loader = DataLoader("text_data.csv")
@@ -4410,16 +4534,35 @@ def load_data():
     return df, stats
 
 
+@st.cache_data
+def load_uploaded_data(upload_bytes, upload_name, text_column):
+    """Load and normalize uploaded customer feedback."""
+    raw_df = parse_uploaded_feedback(upload_bytes, upload_name)
+    df, stats = normalize_feedback_dataframe(raw_df, text_column)
+    return df, stats
+
+
 @st.cache_resource
-def run_clustering():
+def run_clustering(source_kind, upload_bytes=None, upload_name=None, text_column="content"):
     """Run unsupervised clustering pipeline."""
-    df, stats = load_data()
+    if source_kind == "upload":
+        df, stats = load_uploaded_data(upload_bytes, upload_name, text_column)
+    else:
+        df, stats = load_data()
+
+    if df.empty:
+        raise ValueError("No usable feedback rows were found in the selected data source.")
+    if len(df) < 8:
+        raise ValueError(
+            "PX-Intel needs at least 8 usable feedback rows to run clustering, audit, causal reasoning, and action intelligence."
+        )
+
     texts = df["text_normalized"].tolist()
 
     engine = UnsupervisedClusteringEngine(random_state=42)
     engine.fit(texts, auto_select=True)
 
-    return engine, df, texts
+    return engine, df, texts, stats
 
 
 @st.cache_resource
@@ -4447,13 +4590,27 @@ def run_causal_reasoning(
 
 def main():
     """Main dashboard flow."""
-    active_section = render_sidebar()
+    active_section, feedback_source = render_sidebar()
     render_slogan_strip()
 
     # Load data and run clustering
-    with st.spinner("Loading data and discovering clusters..."):
-        clustering_engine, df, texts = run_clustering()
-        cluster_assignments = clustering_engine.cluster_assignments
+    try:
+        with st.spinner("Loading feedback and discovering clusters..."):
+            clustering_engine, df, texts, loader_stats = run_clustering(
+                feedback_source["kind"],
+                feedback_source.get("upload_bytes"),
+                feedback_source.get("upload_name"),
+                feedback_source.get("text_column"),
+            )
+            cluster_assignments = clustering_engine.cluster_assignments
+    except Exception as exc:
+        st.error(f"PX-Intel could not process the selected feedback data: {exc}")
+        st.stop()
+
+    st.caption(
+        f"Active feedback source: {feedback_source['label']} | "
+        f"{loader_stats.successful_rows:,} usable rows processed"
+    )
 
     # Run audit
     with st.spinner("Auditing clusters (sentiment + vocabulary)..."):

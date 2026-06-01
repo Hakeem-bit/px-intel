@@ -1313,7 +1313,7 @@ def load_saved_ai_settings():
     return {}
 
 
-def save_ai_settings(api_key, model, generation_strength, enabled):
+def save_ai_settings(api_key, model, generation_strength, enabled=True):
     """Persist AI settings locally so refreshes keep the configured mode."""
     AI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -1542,14 +1542,9 @@ def render_sidebar():
             st.session_state.openai_model_input = configured_model
         if "ai_generation_strength" not in st.session_state:
             st.session_state.ai_generation_strength = saved_strength
-        if "ai_enhancement_enabled" not in st.session_state:
-            st.session_state.ai_enhancement_enabled = bool(
-                saved_ai_settings.get("enabled", bool(configured_key))
-            )
-
         with st.expander("AI enhancement", expanded=False):
             st.caption(
-                "Optional: use an OpenAI key to sharpen signal naming, stakeholder explanations, reports, and agent answers."
+                "Add an OpenAI key once. PX-Intel will use it automatically for smarter signal language, reports, and agent answers."
             )
             entered_key = st.text_input(
                 "OpenAI API key",
@@ -1568,11 +1563,7 @@ def render_sidebar():
                 help="Controls how much structure and detail AI-generated answers and reports should produce.",
             )
             ai_key = entered_key.strip() or configured_key
-            ai_enabled = st.toggle(
-                "Use AI-enhanced language",
-                key="ai_enhancement_enabled",
-                help="The deterministic PX-Intel pipeline still runs first. AI only rewrites manager-facing language from the existing evidence.",
-            )
+            ai_enabled = bool(ai_key)
             save_col, clear_col = st.columns(2)
             with save_col:
                 save_ai = st.button(
@@ -1594,7 +1585,7 @@ def render_sidebar():
                         ai_key,
                         ai_model,
                         generation_strength,
-                        ai_enabled,
+                        True,
                     )
                     st.success("AI settings saved locally for future refreshes.")
                 else:
@@ -1604,14 +1595,14 @@ def render_sidebar():
                 st.success("Saved AI settings cleared. Refresh to start without saved AI settings.")
             refresh_requested = False
             if ai_enabled and ai_key:
-                st.success("AI enhancement ready.")
+                st.success("AI enhancement ready. PX-Intel will use the key automatically.")
                 refresh_requested = st.button(
                     "Refresh AI language",
                     key="refresh_ai_language",
                     help="Regenerate enhanced signal names and recommendations for the current data.",
                 )
             else:
-                st.caption("PX-Intel will use the local rule-based intelligence layer.")
+                st.caption("PX-Intel will use the local intelligence layer until an OpenAI key is provided.")
             st.caption(
                 "Saved settings are stored locally on this Mac, outside the git repository."
             )
@@ -4359,6 +4350,39 @@ def render_agent_decision_support(
         )
 
 
+def infer_agent_response_mode(question):
+    """Infer the best AI response format from the user's question."""
+    text = str(question or "").lower()
+    if any(
+        phrase in text
+        for phrase in (
+            "30-day",
+            "30 day",
+            "action plan",
+            "operational plan",
+            "operating plan",
+            "roadmap",
+            "cadence",
+        )
+    ):
+        return "Operational action plan"
+    if any(phrase in text for phrase in ("root cause", "why is", "why are", "cause")):
+        return "Root cause analysis"
+    if any(
+        phrase in text
+        for phrase in ("evidence", "proof", "show me the data", "customer language")
+    ):
+        return "Evidence memo"
+    if any(
+        phrase in text
+        for phrase in ("recover", "recovery", "apology", "customer recovery")
+    ):
+        return "Customer recovery plan"
+    if any(phrase in text for phrase in ("report", "write up", "write-up", "section")):
+        return "Report section"
+    return "Decision brief"
+
+
 def render_agent_chat(
     action_agent,
     action_insights,
@@ -4369,37 +4393,20 @@ def render_agent_chat(
         '<h4 class="cx-section-heading">Ask PX-Intel Agent</h4>',
         unsafe_allow_html=True,
     )
-    response_modes = [
-        "Decision brief",
-        "Evidence memo",
-        "Operational action plan",
-        "Root cause analysis",
-        "Customer recovery plan",
-        "Report section",
-    ]
-    mode_col, status_col = st.columns([1.1, 1.9])
-    with mode_col:
-        response_mode = st.selectbox(
-            "Agent output",
-            response_modes,
-            key="cx_agent_response_mode",
+    if ai_config and ai_config.get("enabled"):
+        st.caption(
+            f"AI generation active: {ai_config.get('model')} · {ai_config.get('generation_strength')}. PX-Intel chooses the response format from your question."
         )
-    with status_col:
-        if ai_config and ai_config.get("enabled"):
-            st.caption(
-                f"AI generation active: {ai_config.get('model')} · {ai_config.get('generation_strength')}"
-            )
-        else:
-            st.caption(
-                "Local mode is active. Add an OpenAI key in the sidebar for full generated memos, plans, and report sections."
-            )
+    else:
+        st.caption(
+            "Local intelligence is active. Add an OpenAI key in the sidebar for richer generated answers."
+        )
 
     chat_signature = (
-        "structured_v3",
+        "auto_intent_v1",
         "ai" if ai_config and ai_config.get("enabled") else "local",
         ai_config.get("model") if ai_config else "local",
         ai_config.get("generation_strength") if ai_config else "local",
-        response_mode,
         len(action_insights),
     )
     if st.session_state.get("cx_agent_messages_signature") != chat_signature:
@@ -4416,7 +4423,7 @@ def render_agent_chat(
                     action_insights,
                     ai_config,
                     ai_context,
-                    response_mode,
+                    infer_agent_response_mode("summarize for leadership"),
                 ),
             }
         ]
@@ -4443,7 +4450,7 @@ def render_agent_chat(
                             action_insights,
                             ai_config,
                             ai_context,
-                            response_mode,
+                            infer_agent_response_mode(prompt),
                         ),
                     }
                 )
@@ -4480,7 +4487,7 @@ def render_agent_chat(
             action_insights,
             ai_config,
             ai_context,
-            response_mode,
+            infer_agent_response_mode(cleaned_question),
         )
         st.session_state.cx_agent_messages.append(
             {"role": "assistant", "content": answer}

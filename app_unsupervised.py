@@ -1483,6 +1483,39 @@ def build_ai_config(
     }
 
 
+def infer_agent_response_mode(question):
+    """Infer the best AI response format from the user's question."""
+    text = str(question or "").lower()
+    if any(
+        phrase in text
+        for phrase in (
+            "30-day",
+            "30 day",
+            "action plan",
+            "operational plan",
+            "operating plan",
+            "roadmap",
+            "cadence",
+        )
+    ):
+        return "Operational action plan"
+    if any(phrase in text for phrase in ("root cause", "why is", "why are", "cause")):
+        return "Root cause analysis"
+    if any(
+        phrase in text
+        for phrase in ("evidence", "proof", "show me the data", "customer language")
+    ):
+        return "Evidence memo"
+    if any(
+        phrase in text
+        for phrase in ("recover", "recovery", "apology", "customer recovery")
+    ):
+        return "Customer recovery plan"
+    if any(phrase in text for phrase in ("report", "write up", "write-up", "section")):
+        return "Report section"
+    return "Decision brief"
+
+
 def render_sidebar():
     """Render Soft UI-inspired PX-Intel navigation context."""
     with st.sidebar:
@@ -4468,39 +4501,6 @@ def render_agent_decision_support(
         )
 
 
-def infer_agent_response_mode(question):
-    """Infer the best AI response format from the user's question."""
-    text = str(question or "").lower()
-    if any(
-        phrase in text
-        for phrase in (
-            "30-day",
-            "30 day",
-            "action plan",
-            "operational plan",
-            "operating plan",
-            "roadmap",
-            "cadence",
-        )
-    ):
-        return "Operational action plan"
-    if any(phrase in text for phrase in ("root cause", "why is", "why are", "cause")):
-        return "Root cause analysis"
-    if any(
-        phrase in text
-        for phrase in ("evidence", "proof", "show me the data", "customer language")
-    ):
-        return "Evidence memo"
-    if any(
-        phrase in text
-        for phrase in ("recover", "recovery", "apology", "customer recovery")
-    ):
-        return "Customer recovery plan"
-    if any(phrase in text for phrase in ("report", "write up", "write-up", "section")):
-        return "Report section"
-    return "Decision brief"
-
-
 def render_agent_chat(
     action_agent,
     action_insights,
@@ -4577,22 +4577,22 @@ def render_agent_chat(
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    question_col, ask_col = st.columns([3.2, 0.8])
-    with question_col:
-        user_question = st.text_area(
-            "Ask PX-Intel",
-            placeholder="Ask about priorities, cascades, actions, or a specific signal...",
-            key="cx_agent_question_input",
-            label_visibility="collapsed",
-            height=84,
-        )
-    with ask_col:
-        ask_submitted = st.button(
-            "Ask PX-Intel",
-            key="cx_agent_question_submit",
-            width="stretch",
-        )
-        st.caption("Answers use the active dataset and visible PX-Intel signals.")
+    with st.form("cx_agent_question_form", clear_on_submit=True):
+        question_col, ask_col = st.columns([3.2, 0.8])
+        with question_col:
+            user_question = st.text_area(
+                "Ask PX-Intel",
+                placeholder="Ask about priorities, root causes, current actions, evidence, risks, strengths, or a specific signal...",
+                key="cx_agent_question_input",
+                label_visibility="collapsed",
+                height=84,
+            )
+        with ask_col:
+            ask_submitted = st.form_submit_button(
+                "Ask PX-Intel",
+                width="stretch",
+            )
+            st.caption("Answers use the active dataset and visible PX-Intel signals.")
 
     if ask_submitted and user_question.strip():
         cleaned_question = user_question.strip()

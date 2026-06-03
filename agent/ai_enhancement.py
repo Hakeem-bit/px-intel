@@ -131,9 +131,11 @@ class OpenAIInsightEnhancer:
             "dataset_context": context or {},
             "response_requirements": [
                 "Answer as a business intelligence operator, not a chatbot.",
+                "Answer the user's actual question first before adding context.",
                 "Use only the provided PX-Intel context.",
                 "Reference professional signal names, not raw cluster labels.",
                 "Include evidence, metric reasoning, owner-ready next actions, and success measures.",
+                "Infer whether the user is asking for actions, evidence, risks, strengths, metrics, root causes, comparisons, reports, or a specific signal.",
                 "If the user asks what current actions need to be taken, return a concise current action queue, not a full operational plan.",
                 "Only write a multi-step operational plan when the user explicitly asks for a plan, 30-day plan, or operating cadence.",
                 "If response_mode asks for a plan or memo, produce a complete artifact with headings.",

@@ -3,6 +3,7 @@ M5: Customer Experience Action Intelligence
 Rule-based decision-support layer for cluster, sentiment, keyword, and causal outputs.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -191,6 +192,9 @@ class CXActionIntelligenceAgent:
 
         referenced_signal = self._find_referenced_signal(normalized, insights)
 
+        if self._is_nli_question(normalized):
+            return self._answer_nli_explanation(insights, referenced_signal)
+
         if any(token in normalized for token in ("evidence", "proof", "example", "examples", "comment", "comments", "said")):
             return self._answer_evidence(insights, referenced_signal)
 
@@ -245,6 +249,94 @@ class CXActionIntelligenceAgent:
             return self._answer_signal_question(referenced_signal)
 
         return self._answer_summary(insights)
+
+    def _is_nli_question(self, normalized: str) -> bool:
+        """Detect glossary questions about PX-Intel's NLI support language."""
+        if "nli" in normalized:
+            return True
+        glossary_phrases = (
+            "natural language inference",
+            "what does support mean",
+            "weak support",
+            "causal support",
+            "issue signals supported",
+            "supported issue signals",
+            "entailment",
+        )
+        return any(phrase in normalized for phrase in glossary_phrases)
+
+    def _answer_nli_explanation(
+        self,
+        insights: List[ActionInsight],
+        focus: Optional[ActionInsight] = None,
+    ) -> str:
+        """Explain NLI support in stakeholder-friendly language."""
+        selected = [focus] if focus is not None else insights[:4]
+        support_rows = []
+        for item in selected:
+            support_match = re.search(
+                r"(\d+(?:\.\d+)?)%\s+(weak\s+)?NLI support",
+                str(item.root_cause),
+                flags=re.IGNORECASE,
+            )
+            if not support_match:
+                continue
+            support_rows.append(
+                {
+                    "insight": item,
+                    "support": float(support_match.group(1)),
+                    "weak": bool(support_match.group(2)),
+                }
+            )
+
+        lines = [
+            "### What NLI means in PX-Intel",
+            "",
+            (
+                "**NLI** means **Natural Language Inference**. PX-Intel uses it in the "
+                "causal-reasoning step to test whether a feedback theme or keyword appears "
+                "to support a sentiment or root-cause hypothesis."
+            ),
+            "",
+            (
+                "When you see wording like **91% NLI support**, read it as model confidence "
+                "that the phrase is a plausible driver of the signal. It is **not** saying "
+                "that 91% of customers said the same thing, and it is not absolute proof of causality."
+            ),
+            "",
+            "#### How to use it",
+            "",
+            "- High NLI support means the root-cause hypothesis is stronger and worth operational review.",
+            "- Weak NLI support means PX-Intel is flagging a possible cause, but the team should validate it with more evidence.",
+            "- Always pair NLI support with feedback volume, negative concentration, representative comments, and the recommended action.",
+        ]
+
+        if support_rows:
+            lines.extend(["", "#### In the current data"])
+            for row in support_rows:
+                item = row["insight"]
+                qualifier = "weak support" if row["weak"] else "support"
+                lines.append(
+                    (
+                        f"- **{insight_display_name(item, include_reference=True)}** shows "
+                        f"**{row['support']:.0f}% NLI {qualifier}** for the root-cause phrase "
+                        f"`{item.root_cause}`. Treat that as a confidence signal behind the "
+                        f"recommended action, not as a standalone decision."
+                    )
+                )
+
+        lines.extend(
+            [
+                "",
+                "#### Plain-English translation",
+                "",
+                (
+                    "PX-Intel is saying: “The language in the feedback appears to support this "
+                    "root-cause explanation, so use it as evidence for where to investigate first.”"
+                ),
+            ]
+        )
+        return "\n".join(lines)
 
     def _infer_issue_theme(self, keywords: List[str]) -> str:
         """Infer a manager-friendly issue theme from extracted keywords."""
